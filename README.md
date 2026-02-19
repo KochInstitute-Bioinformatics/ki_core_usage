@@ -33,7 +33,7 @@ Lookup table between Faculty Keys and core-specific sponsor relationships
 
 Simplified Sponsor relationships for plotting
 
-` [Simple Sponsors](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/sponsor.Keys.ForPlotting.xlsx)
+- [Simple Sponsors](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/sponsor.Keys.ForPlotting.xlsx)
 
 ## Clean and assembly raw ilabs data
 
