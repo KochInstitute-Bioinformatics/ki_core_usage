@@ -1,0 +1,849 @@
+---
+title: "IGB Usage - Data Cleaning, Summary, and Visualizations"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "12/6/2025"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2,
+  fig.width = 6,
+  fig.height = 6,
+  dpi = 300
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+```
+
+# Data Import
+
+# Read in sheets from excel files
+
+```{r}
+faculty.groups <- read.xlsx("../data/PI_Colors.xlsx")
+ilabs.bioinfo <- read.xlsx("../data/05012020_10312025_BCC_completed.xlsx", sheet="05012020_10312025_charges_repor")
+#ilabs.poster <- read.xlsx("../data/05012020_10312025_BCC_completed.xlsx", sheet="poster printing")
+#ilabs.storage <- read.xlsx("../data/05012020_10312025_BCC_completed.xlsx", sheet="data storage")
+#ext.billing.ilabs.merge <- read.xlsx("../data/ExtUsage_01May2020_31OCT2025.xlsx", sheet="ExtUsage2025_2510 for ilabmerge")
+#ext.billing.Ext.use <- read.xlsx("../data/ExtUsage_01May2020_31OCT2025.xlsx", sheet="ExtUsage2025_2510")
+ext.billing.infStor <- read.xlsx("../data/ExtUsage_01May2020_31OCT2025.xlsx", sheet="informatics storage reagents")
+```
+
+# Column Cleaning
+
+## ilabs work
+
+This block checks to see if all columns of all objects that start with
+the string "ilabs" have identical column names note, it would be ideal
+to have raw ilabs export data in a single file and then extract poster
+and storage within this code
+
+```{r}
+obj_names <- ls(pattern="^ilabs")
+col_names_list <- lapply(obj_names, function(x) colnames(get(x)))
+
+# Compare all to the first one
+all(sapply(col_names_list[-1], function(x) identical(x, col_names_list[[1]])))
+```
+
+## simplify the ilabs.bioinfo dataframe
+
+The imported object has 47 columns, some columns have a single value,
+some are empty. This first step identifies those columns and summarizes
+the results
+
+```{r}
+simple.cols <- map_df(names(ilabs.bioinfo), ~{
+  col <- ilabs.bioinfo[[.]]
+  n_unique <- n_distinct(col[!is.na(col)])
+  
+  tibble(
+    column = .,
+    value = if_else(all(is.na(col)), 
+                    "empty",
+                    if_else(n_unique == 1,
+                           as.character(unique(col[!is.na(col)])[1]),
+                           NA_character_))
+  )
+}) %>%
+  filter(!is.na(value))
+
+kable(simple.cols, format = "simple")
+```
+
+Now that the information is captured, exclude those simple columns,
+reported on above, and create a new simplified dataframe
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo %>% dplyr::select(!all_of(simple.cols$column))
+dim(ilabs.bioinfo.simple)
+```
+
+## Select and Repair date data
+
+This simplified dataframe has several columns that report dates but
+Purchase.Date is the one that captures information about when the
+service was provided. Exclude unnecessary dates and adjust the values to
+usable information
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% dplyr::select(-Creation.Date,-Completion.Date,-Billing.Date,-Date.file.sent.to.ERP,-Billing.Event.End.Date)
+dim(ilabs.bioinfo.simple)
+```
+
+The imported dates are in a machine-readable format that is not
+valuable. convert to human readable:
+
+```{r}
+ilabs.bioinfo.simple$Purchase.Date <- as.Date(ilabs.bioinfo.simple$Purchase.Date, origin = "1899-12-30")
+```
+
+The year information can now be accessed with code like this:
+
+```{r}
+ilabs.bioinfo.simple %>%
+  mutate(year = year(Purchase.Date)) %>%
+  group_by(year) %>%
+  summarise(total_price = sum(Quantity))
+```
+
+## email columns
+
+For the purpose of CCSG reporting, email addresses are not needed,
+exclude these from the simplified data frame
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% dplyr::select(-User.Login.Email,-PI.Email,-Financial.Contact.Email)
+dim(ilabs.bioinfo.simple)
+```
+
+## Additional columns to exlude for simplicity
+
+Our reporting here aims to summarize quantities rather than dollars so
+some columns are not necessary also Asset.ID is not needed
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% dplyr::select(-Asset.ID,-Customer.Title,-Payment.Information,-Cost.Object,
+                                                               -Billing.Status,-Price,-Total.Price,-Invoice.Num,
+                                                               -Charge.ID,-Created.By)
+dim(ilabs.bioinfo.simple)
+```
+
+Most of the values in the column No.Charge.Justification are empty
+
+```{r}
+table(ilabs.bioinfo.simple$No.Charge.Justification)
+```
+
+The few annotations that are there are not substantial Quantity and
+should still be counted in reporting
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(!is.na(No.Charge.Justification)) %>% dplyr::select(Service.ID,Service.Type,Purchase.Date,Quantity)
+```
+
+Exclude the column
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% dplyr::select(-No.Charge.Justification)
+dim(ilabs.bioinfo.simple)
+```
+
+# Data Cleaning
+
+Note: Many of these operations are likely to be bioinformatics specific
+but the approaches can be applied elsewhere.
+
+## Repairing Service.Type
+
+There are some storage entries in the dataframe:
+
+```{r}
+table(ilabs.bioinfo.simple$Service.Type)
+```
+
+Exclude these charges with the following command, note, this same
+approach, and its inverse, could be applied to the entire ilabs export
+It was manually done on the input data
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% 
+  dplyr::filter(!Service.Type %in% c("Data Storage Charge", "Data Storage Monthly Charge"))
+dim(ilabs.bioinfo.simple)
+```
+
+The column Service.Type has some overly complicated values and some
+muddled information. these commands will make repairs:
+
+any time the string "Training" appears in a value, the value should be
+renamed to "Training_Session"
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Service.Type = case_when(
+    str_detect(Service.Type, regex("Training", ignore_case = TRUE)) ~ "Training_Session",
+    TRUE ~ Service.Type
+  ))
+```
+
+```{r}
+table(ilabs.bioinfo.simple$Service.Type)
+```
+
+The rows annotated with Bioinformatics Project Consult are in error Some
+should actually be Bioinformatics Project Request or Prepaid
+Bioinformatics Support
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Service.Type == "Bioinformatics Project Consult") %>% dplyr::select(Service.ID) %>% table()
+```
+
+These mis-annotated rows are the only occurences of those service IDs in
+the data
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Service.ID == "BCC-AMON-prepaid bioinformatics 0.4 - 2021")  %>% dplyr::select(Service.ID) %>% table()
+ilabs.bioinfo.simple %>% dplyr::filter(Service.ID == "BCC-HS-2606")  %>% dplyr::select(Service.ID) %>% table()
+```
+
+Conditionally rename Service.Type for these ServiceIDs
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Service.Type = case_when(
+    Service.ID == "BCC-AMON-prepaid bioinformatics 0.4 - 2021" ~ "Prepaid Bioinformatics Support",
+    Service.ID == "BCC-HS-2606" ~ "Bioinformatics Project Request",
+    TRUE ~ Service.Type
+  ))
+```
+
+```{r}
+table(ilabs.bioinfo.simple$Service.Type)
+```
+
+The column names are long and somewhat confusing, simplify them with
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Service.Type = case_when(
+    Service.Type == "Bioinformatics Project Request" ~ "Project",
+    Service.Type == "Prepaid Bioinformatics Support" ~ "Project_Prepaid",
+    TRUE ~ Service.Type  # Keep any other values unchanged
+  ))
+```
+
+```{r}
+table(ilabs.bioinfo.simple$Service.Type)
+```
+
+The Service.Type "Teaching - Duan" is an attempt to capture a 1:1
+teaching event. The price is the same as project work and the category
+is not consistently tracked in bioinformatics data. The line between
+project work and 1:1 teaching is grey, move these values to project
+work, these kinds of hours would often just be tracked by project hours
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Service.Type = case_when(
+    Service.Type == "Teaching - Duan" ~ "Project",
+    TRUE ~ Service.Type  # Keep any other values unchanged
+  ))
+```
+
+Any values in here named with "Prepaid Bioinformatics Support (KI)" can
+be changed to "Project_Prepaid" I checked this with the following
+command:
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Service.Type == "Prepaid Bioinformatics Support (KI)") %>% dplyr::select(Service.ID) %>% table()
+```
+
+this repairs the data:
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Service.Type = case_when(
+    Service.Type == "Prepaid Bioinformatics Support (KI)" ~ "Project_Prepaid",
+    TRUE ~ Service.Type  # Keep any other values unchanged
+  ))
+```
+
+```{r}
+table(ilabs.bioinfo.simple$Service.Type)
+```
+
+## Comparing Service.Type and Category
+
+Two columns appear to contain similar data, Service.Type, Category This
+commands explore the relationships between the values
+
+```{r}
+table(ilabs.bioinfo.simple$Service.Type,ilabs.bioinfo.simple$Category)
+```
+
+Almost always, these are appropriately annotated Hours of Service but
+there are questions.
+
+These are likely to be an entry glitch that is catching the end of month
+prepaid billing events for prepaid support. All of the other entries of
+this type are under Service.Type Project_Prepaid and usually have
+Unit.of.Measure of Month
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Category == "Prepaid Support" & ilabs.bioinfo.simple$Service.Type == "Project_Prepaid") %>% 
+  dplyr::select(Unit.of.Measure) %>% table()
+
+ilabs.bioinfo.simple %>% dplyr::filter(Category == "Prepaid Support" & ilabs.bioinfo.simple$Service.Type == "Project") %>% 
+  dplyr::select(Unit.of.Measure) %>% table()
+```
+
+Check the each values in more detail:
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Category == "Prepaid Support" & 
+                                         ilabs.bioinfo.simple$Service.Type == "Project" &
+                                         ilabs.bioinfo.simple$Unit.of.Measure == "each")
+```
+
+Based on all this, rows where Category == "Prepaid Support" are billing
+events for prepaid support that should be excluded from reporting remove
+them with:
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% 
+  dplyr::filter(!Category %in% c("Prepaid Support"))
+dim(ilabs.bioinfo.simple)
+```
+
+Recheck the relationships between Service.Type, Category
+
+```{r}
+table(ilabs.bioinfo.simple$Service.Type,ilabs.bioinfo.simple$Category)
+```
+
+There is another imperfection in the data with Training, check what the
+123 look like. Note the trailing space in this category
+
+these are mis-entered training events. The distinction is not important
+a ilabs.bioinfo.simple\$Category
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Category == "Hours of Service " & Service.Type == "Training_Session") #%>% 
+  #dplyr::select() #%>% table()
+```
+
+these are inconsistently entered training events. The distinction is not
+important because the information is captured in Service.Type and the
+column Category is no longer necessary, remove it
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% 
+  dplyr::select(-Category)
+dim(ilabs.bioinfo.simple)
+```
+
+## Repairing Customer.Institute
+
+The information in Customer.Institute is verbose and results in a
+cluttered view, alter these values
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Customer.Institute = case_when(
+    Customer.Institute == "Boston Children's Hospital" ~ "BCH",
+    Customer.Institute == "KI-External" ~ "KI.ext",
+    Customer.Institute == "Massachusetts Institute of Technology" ~ "MIT",
+    Customer.Institute == "Rutgers University" ~ "Rutgers",
+    TRUE ~ Customer.Institute  # Keep any other values unchanged
+  ))
+```
+
+## Repairing Customer.Lab data
+
+This column is important because it will be used to join faculty
+annotation data (see faculty.groups)
+
+```{r}
+table(ilabs.bioinfo.simple$Customer.Lab)
+```
+
+Parse the Customer.Lab data by removing the " Lab" string and extracting
+the correct parenthetical value for one entry, the (Gio) nickname is
+problematic, remove that
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Traverso, (Gio) Carlo Giovanni (Koch) Lab" ~ "Traverso, Gio (Koch)",
+    TRUE ~ Customer.Lab
+  ))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(
+    temp.Inst = str_extract(Customer.Lab, "(?<=\\()(.+?)(?=\\))"),  # Extract text in ()
+    Customer.Lab = str_remove(Customer.Lab, " \\([^)]+\\) Lab$")  # Remove " (value) Lab" from end
+  )
+```
+
+Check the modifications
+
+```{r}
+table(ilabs.bioinfo.simple$Customer.Lab)
+```
+
+compare the new tmp.Inst data to the Customer.Institute data
+
+```{r}
+table(ilabs.bioinfo.simple$Customer.Institute,ilabs.bioinfo.simple$temp.Inst)
+```
+
+These data indicate that the parenthetical value in Customer.Lab is
+sometimes mis-entered and of no value Customer.Institute is all that is
+necessary, remove the temp.Inst column
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% 
+  dplyr::select(-temp.Inst)
+dim(ilabs.bioinfo.simple)
+```
+
+## Repair the Charge.Name column
+
+This column contains incorrect and mixed information. First, there is
+information in there about training session details. Copy this column to
+a new column called "Training.Details" - that can then be modified.
+There is a lot of inconsistency in the names
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% dplyr::mutate(Training.Detail = Charge.Name)
+```
+
+The repairs below are not quite perfect but almost there. it might be
+helpful to associate which staff member teaches which session at some
+point
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Training.Detail = case_when(
+    str_detect(Training.Detail, regex("project|teaching", ignore_case = TRUE)) ~ "",
+    TRUE ~ Training.Detail
+  ))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Training.Detail = str_remove(Training.Detail, "^Training Session: "))
+
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Training.Detail = str_remove(Training.Detail, "^Training Session:"))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Training.Detail = str_replace_all(Training.Detail, "Hands-on", "Hands_on"))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Training.Detail = str_replace_all(Training.Detail, "principles.", "principles - "))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Training.Detail = str_replace_all(Training.Detail, ",  ", " - "))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Training.Detail = str_remove(Training.Detail, " *-.*$"))
+```
+
+Check the modifications
+
+```{r}
+table(ilabs.bioinfo.simple$Training.Detail)
+```
+
+## Charge.name edits
+
+After extraction of the training informaion from Charge.Name, this
+column really captures which staff member did the project work Change
+it's
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Charge.Name = case_when(
+    str_detect(Charge.Name, regex("Training Session", ignore_case = TRUE)) ~ NA_character_,
+    TRUE ~ Charge.Name
+  ))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Charge.Name = str_remove(Charge.Name, "Project *- *"))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  dplyr::mutate(Charge.Name = str_remove(Charge.Name, "Teaching *- *"))
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Charge.Name = str_replace(Charge.Name, "CO-OP \\(for sponsor projects only\\)", "CO-OP_sponsorProj"))
+```
+
+Check the modifications
+
+```{r}
+table(ilabs.bioinfo.simple$Charge.Name)
+```
+
+## working with Notes column
+
+There is a desire to stratify the project summaries into 2 groups, Data
+Management and Project
+
+Create a new column called "Work.Detail" from the column Service.Type
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% dplyr::mutate(Work.Detail = Service.Type)
+```
+
+Identify the data management service IDs
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Charge.Name %in% c("CharlieD", "Taisha")) %>% dplyr::select(Service.ID) %>% table()
+```
+
+This identifies some problems with the data. Rename the Kamm mistate
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Service.ID = str_replace(Service.ID, 
+                                   "\\tBCC-KAMM prepaid bioinformatics 2023-0.2", 
+                                   "BCC-KAMM prepaid bioinformatics 2023-0.2"))
+```
+
+```{r}
+ilabs.bioinfo.simple %>% dplyr::filter(Charge.Name %in% c("CharlieD", "Taisha")) %>% dplyr::select(Service.ID) %>% table()
+```
+
+Modify the Work.Detail column so that it has values for Data_Management
+This logic is potentially imperfect Data managment if: Charge.Name in
+this list: CharlieD,CO-OP,CO-OP_sponsorProj,Nathan,Taisha it is
+Service.ID in this list: BCC-ANK-prepaid
+bioinformatics-0.2,BCC-ENGELWARD prepaid bioinformatics
+2022-0.45,BCC-ENGELWARD prepaid bioinformatics 2023-0.45, BCC-ENGELWARD
+prepaid bioinformatics-0.425,BCC-KAMM prepaid bioinformatics
+2022-0.2,BCC-KAMM prepaid bioinformatics 2023-0.2,BCC-KAMM prepaid
+bioinformatics-0.2, BCC-LGG-prepaid bioinformatics-0.2,BCC-WHITE prepaid
+bioinformatics-0.2
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Work.Detail = case_when(
+    Charge.Name %in% c("CharlieD", "CO-OP", "CO-OP_sponsorProj", "Nathan", "Taisha") |
+    Service.ID %in% c("BCC-ANK-prepaid bioinformatics-0.2",
+                      "BCC-ENGELWARD prepaid bioinformatics 2022-0.45",
+                      "BCC-ENGELWARD prepaid bioinformatics 2023-0.45",
+                      "BCC-ENGELWARD prepaid bioinformatics-0.425",
+                      "BCC-KAMM prepaid bioinformatics 2022-0.2",
+                      "BCC-KAMM prepaid bioinformatics 2023-0.2",
+                      "BCC-KAMM prepaid bioinformatics-0.2",
+                      "BCC-LGG-prepaid bioinformatics-0.2",
+                      "BCC-WHITE prepaid bioinformatics-0.2") ~ "Data_Management",
+    TRUE ~ Work.Detail
+  ))
+```
+
+The notes column captures many instances on Allen work in data managment
+that is attributed to Huiming, repair this Identify Allen Notes for Data
+Management
+
+```{r}
+ilabs.bioinfo.simple %>% 
+  dplyr::filter(Work.Detail == "Data_Management") %>%
+  dplyr::filter(str_detect(Notes, regex("Allen", ignore_case = TRUE))) %>%
+  dplyr::select(Notes) %>% 
+  table()
+```
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>%
+  mutate(Charge.Name = case_when(
+    Notes %in% c("Allen","Allen CSBC","Allen Impact","Allen Metnet","Allen SRP") ~ "Allen",
+    TRUE ~ Charge.Name
+  ))
+```
+
+Check the modifications
+
+```{r}
+table(ilabs.bioinfo.simple$Charge.Name)
+```
+
+# Join Faculty Annotations
+
+Add a Fac.Key column to the data by removing the " Lab" string and
+extracting the correct parenthetical value for one entry, the (Gio)
+nickname is problematic, remove that
+
+```{r}
+faculty.groups <- faculty.groups %>% dplyr::mutate(Fac.Key = Row.Labels)
+```
+
+```{r}
+faculty.groups <- faculty.groups %>%
+  mutate(Fac.Key = case_when(
+    Fac.Key == "Traverso, (Gio) Carlo Giovanni (Koch) Lab" ~ "Traverso, Gio (Koch)",
+    TRUE ~ Fac.Key
+  ))
+```
+
+```{r}
+faculty.groups <- faculty.groups %>%
+  mutate(
+    temp.Inst = str_extract(Fac.Key, "(?<=\\()(.+?)(?=\\))"),  # Extract text in ()
+    Fac.Key = str_remove(Fac.Key, " \\([^)]+\\) Lab$")  # Remove " (value) Lab" from end
+  )
+```
+
+Check the Keys
+
+```{r}
+# Check unique values in ilabs.bioinfo.simple$Customer.Lab
+unique(ilabs.bioinfo.simple$Customer.Lab)
+
+# Check unique values in faculty.groups$Fac.Key
+unique(faculty.groups$Fac.Key)
+
+# See which values match
+intersect(ilabs.bioinfo.simple$Customer.Lab, faculty.groups$Fac.Key)
+
+# See which don't match
+setdiff(ilabs.bioinfo.simple$Customer.Lab, faculty.groups$Fac.Key)
+```
+
+there was a mismatched row, get rid of it
+
+```{r}
+ilabs.bioinfo.simple <- ilabs.bioinfo.simple %>% dplyr::filter(!is.na(Customer.Lab))
+```
+
+## Adding SF faculty annotations
+
+Sarah provided annotations for color:
+
+the colors are:
+
+None = MIT non-sponsor+external
+
+Blue = MIT sponsor
+
+Green = KI member
+
+Pink = KI affiliated (e.g., clinical investigators, prior members,
+postdocs w/ funding, core staff)
+
+These were edited for brevity and to avoid special characters and a
+annotation tibble was created:
+
+```{r}
+fac.annot <- tibble(
+  Color = c("none", "blue", "green", "pink"),
+  Fac.Group = c("MIT_non.sponsor.external", "MIT_sponsor", "KI_member", "KI_affiliate")
+)
+```
+
+Join the annotations to the faculty table
+
+```{r}
+dim(faculty.groups)
+faculty.groups <- faculty.groups %>%
+  merge(fac.annot, 
+        by.x = "Color", 
+        by.y = "Color", 
+        all.x = TRUE, 
+        all.y = TRUE)
+dim(faculty.groups)
+```
+
+Join the faculty annotations
+
+```{r}
+faculty.groups.toJoin <- faculty.groups %>% dplyr::select(Fac.Key,Fac.Group)
+```
+
+```{r}
+dim(ilabs.bioinfo.simple)
+ilabs.bioinfo.simple.final <- ilabs.bioinfo.simple %>%
+  merge(faculty.groups.toJoin, 
+        by.x = "Customer.Lab", 
+        by.y = "Fac.Key", 
+        all.x = TRUE, 
+        all.y = FALSE)
+dim(ilabs.bioinfo.simple.final)
+```
+
+# Export the data
+
+```{r}
+write.xlsx(ilabs.bioinfo.simple.final,"Parsed_Bioinfo_ilabs.xlsx")
+```
+
+# Visualization examples
+
+## Barcharts of data management
+
+```{r}
+ilabs.bioinfo.simple.final %>%
+  filter(Work.Detail == "Data_Management") %>%
+  group_by(Fac.Group, Charge.Name) %>%
+  summarise(total_quantity = sum(Quantity, na.rm = TRUE), .groups = 'drop') %>%
+  complete(Fac.Group, Charge.Name, fill = list(total_quantity = 0)) %>%
+  ggplot(aes(x = Fac.Group, y = total_quantity, fill = Charge.Name)) +
+  geom_col(position = "dodge") +
+  labs(title = "Data Management Total Quantity by Faculty Group and Charge Name",
+       x = "Faculty Group",
+       y = "Total Quantity",
+       fill = "Charge Name") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Barcharts of project
+
+```{r}
+ilabs.bioinfo.simple.final %>%
+  filter(Work.Detail %in% c("Project", "Project_Prepaid")) %>%
+  group_by(Fac.Group, Charge.Name) %>%
+  summarise(total_quantity = sum(Quantity, na.rm = TRUE), .groups = 'drop') %>%
+  complete(Fac.Group, Charge.Name, fill = list(total_quantity = 0)) %>%
+  ggplot(aes(x = Fac.Group, y = total_quantity, fill = Charge.Name)) +
+  geom_col(position = "dodge") +
+  labs(title = "Project Total Quantity by Faculty Group and Charge Name",
+       x = "Faculty Group",
+       y = "Total Quantity",
+       fill = "Charge Name") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# Data Repair - BMC file
+
+## select relevant rows
+
+```{r}
+ext.billing.infStor.filt <- ext.billing.infStor %>%
+  dplyr::filter(Charge.Name %in% c("Informatics Support",
+                                   "Informatics Support - FEB",
+                                   "Informatics Support - JAN"))
+```
+
+## Repair the date
+
+The imported dates are in a machine-readable format that is not
+valuable. convert to human readable:
+
+```{r}
+ext.billing.infStor.filt$Purchase.Date <- as.Date(ext.billing.infStor.filt$DATE, origin = "1899-12-30")
+```
+
+remove the old date and other unnecssary columns
+
+```{r}
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::select(-COST,-DATE,-CostObj,-TargetObject,-`_ID`,-PROJID)
+```
+
+Add missing columns needed to match ilabs data
+
+```{r}
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Service.ID = "")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Customer.Institute = "")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Charge.Name = "")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Notes = "FileMaker Data")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Unit.of.Measure = "hour")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Price.Type = "External non-profit")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Center = "MIT-BMC-CORE")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Training.Detail = "")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Work.Detail = "Project")
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::mutate(Fac.Group = "MIT_non.sponsor.external")
+```
+
+Rename columns
+
+```{r}
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::rename(Service.Type = Usage.TYPE)
+```
+
+Reorder columns to match ilabs
+
+```{r}
+ext.billing.infStor.filt <- ext.billing.infStor.filt %>% dplyr::select(Customer.Lab,Service.ID,Service.Type,Customer.Name,
+                                                                       Customer.Institute,Charge.Name,Notes,Unit.of.Measure,
+                                                                       Quantity,Price.Type,Purchase.Date,Center,Training.Detail,Work.Detail,Fac.Group)
+```
+
+Write to file for manual edits
+
+```{r}
+#write.xlsx(ext.billing.infStor.filt,file="sl_external.Filt.xlsx")
+```
+
+Read in manually edited file
+
+```{r}
+ext.billing.infStor.filt.edits <- read.xlsx("sl_external.Filt.xlsx")
+```
+
+Bind ilabs and filemaker data to one file
+
+```{r}
+ilabs.filemaker.final <- rbind(ilabs.bioinfo.simple.final,ext.billing.infStor.filt.edits)
+```
+
+# write final output file
+
+```{r}
+write.xlsx(ilabs.filemaker.final,file="BCC_ilabs.filemaker.final.xlsx")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "dataCleaning_sessionInfo.txt")
+```

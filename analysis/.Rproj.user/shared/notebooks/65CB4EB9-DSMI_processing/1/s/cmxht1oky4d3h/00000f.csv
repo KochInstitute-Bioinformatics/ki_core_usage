@@ -1,0 +1,4 @@
+"0","ilabs <- read.xlsx(""../data/stock_ilabs.xlsx"")"
+"2","Error in read.xlsx(""../data/stock_ilabs.xlsx"") : 
+  could not find function ""read.xlsx""
+"

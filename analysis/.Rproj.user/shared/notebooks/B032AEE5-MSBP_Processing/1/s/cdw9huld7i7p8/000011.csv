@@ -1,0 +1,2 @@
+"0","fac.annot <- read.xlsx(""../data/KI_FacultyAnnotations.xlsx"")"
+"0","sf.annot <- read.xlsx(""../data/SF.FacultyAnnotations.xlsx"")"

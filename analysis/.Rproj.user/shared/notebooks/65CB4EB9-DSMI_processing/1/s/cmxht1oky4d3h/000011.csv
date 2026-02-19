@@ -1,0 +1,4 @@
+"0","ilabs.dsmi <- ilabs %>% dplyr::filter(Core.Name == ""Bioinformatics and Computing Core"")"
+"2","Error in ilabs %>% dplyr::filter(Core.Name == ""Bioinformatics and Computing Core"") : 
+  could not find function ""%>%""
+"

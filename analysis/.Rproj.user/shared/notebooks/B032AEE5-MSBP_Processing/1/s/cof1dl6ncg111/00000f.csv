@@ -1,0 +1,3 @@
+"0","metpro.lab.data <- metpro %>% dplyr::select(lab_name)"
+"0","metpro.lab.data.distinct <- metpro.lab.data %>% dplyr::distinct()"
+"0","write.xlsx(metpro.lab.data.distinct,""../data/metpro.lab.data.distinct.xlsx"")"

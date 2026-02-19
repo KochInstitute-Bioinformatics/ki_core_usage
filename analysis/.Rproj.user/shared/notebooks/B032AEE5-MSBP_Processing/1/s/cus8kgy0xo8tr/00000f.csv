@@ -1,0 +1,4 @@
+"0","time.collapsed <- time.collapse %>%"
+"0","  arrange(Service.ID) %>%"
+"0","  distinct(Service.ID, .keep_all = TRUE) %>%"
+"0","  dplyr::mutate(Quantity = 1)"

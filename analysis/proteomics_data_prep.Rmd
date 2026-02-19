@@ -1,0 +1,372 @@
+---
+title: "Proteomics - Data Cleaning, Summary, and Visualizations"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "12/18/2025"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2,
+  fig.width = 6,
+  fig.height = 6,
+  dpi = 300
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+```
+
+# Data Import
+
+## Read in external data (first pass)
+
+```{r}
+metabolomics.ext.jobs <- read.xlsx("../data/metabolomics_jobs_01JAN2024_31OCT2025.xlsx", sheet = "Jobs")
+metabolomics.ext.analyses <- read.xlsx("../data/metabolomics_jobs_01JAN2024_31OCT2025.xlsx", sheet = "Analyses")
+```
+
+## Read in METPRO invoice data
+
+```{r}
+metpro24 <- read.xlsx("../data/METPRO_2024_Core Charges by Service.xlsx")
+metpro25 <- read.xlsx("../data/METPRO2025_Core Charges by Service.xlsx")
+```
+
+# Data Repair - Whitehead metabolomics files
+
+There are 2 sheets in the data from whitehead: "metabolomics.ext.analyses" and "metabolomics.ext.jobs"
+
+It is not clear which of the 2 sheets has the necessary data - remove low complexity columns from each
+
+## simplify the metabolomics.ext.analyses dataframe
+
+The imported object has 17 columns, some columns have a single value, some are empty. This first step identifies those columns and summarizes
+the results
+
+```{r}
+simple.cols <- map_df(names(metabolomics.ext.analyses), ~{
+  col <- metabolomics.ext.analyses[[.]]
+  n_unique <- n_distinct(col[!is.na(col)])
+  
+  tibble(
+    column = .,
+    value = if_else(all(is.na(col)), 
+                    "empty",
+                    if_else(n_unique == 1,
+                           as.character(unique(col[!is.na(col)])[1]),
+                           NA_character_))
+  )
+}) %>%
+  filter(!is.na(value))
+
+kable(simple.cols, format = "simple")
+```
+
+Now that the information is captured, exclude those simple columns,
+reported on above, and create a new simplified dataframe
+
+```{r}
+metabolomics.ext.analyses.simple <- metabolomics.ext.analyses %>% dplyr::select(-all_of(simple.cols$column))
+dim(metabolomics.ext.analyses.simple)
+```
+
+## simplify the metabolomics.ext.analyses dataframe
+
+The imported object has 44 columns, some columns have a single value, some are empty. This first step identifies those columns and summarizes
+the results
+
+```{r}
+simple.cols <- map_df(names(metabolomics.ext.jobs), ~{
+  col <- metabolomics.ext.jobs[[.]]
+  n_unique <- n_distinct(col[!is.na(col)])
+  
+  tibble(
+    column = .,
+    value = if_else(all(is.na(col)), 
+                    "empty",
+                    if_else(n_unique == 1,
+                           as.character(unique(col[!is.na(col)])[1]),
+                           NA_character_))
+  )
+}) %>%
+  filter(!is.na(value))
+
+kable(simple.cols, format = "simple")
+```
+
+Now that the information is captured, exclude those simple columns,
+reported on above, and create a new simplified dataframe
+
+```{r}
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs %>% dplyr::select(-all_of(simple.cols$column))
+dim(metabolomics.ext.jobs.simple)
+```
+
+## id in both tables is unique
+
+Compare row number from dim with lenght of unique vector
+
+```{r}
+dim(metabolomics.ext.analyses.simple)
+length(unique(metabolomics.ext.analyses.simple$id))
+
+dim(metabolomics.ext.jobs.simple)
+length(unique(metabolomics.ext.jobs.simple$id))
+```
+
+## The id column cant be used to join the data because the overlab is far from complete
+
+```{r}
+jobs <- metabolomics.ext.jobs.simple$id
+analyses <- metabolomics.ext.analyses.simple$id
+
+unique_to_jobs <- setdiff(jobs, analyses)
+in_common <- intersect(jobs, analyses)
+unique_to_analyses <- setdiff(analyses, jobs)
+
+cat("Unique to jobs", length(unique_to_jobs), "\n")
+cat("In common:", length(in_common), "\n")
+cat("Unique to analyses:", length(unique_to_analyses), "\n")
+cat("Total in jobs:", length(jobs), "\n")
+cat("Total in analyses:", length(analyses), "\n")
+```
+
+# Examination of metabolomics dataframes
+
+Summarize the number of unique values per column.
+
+## jobs
+
+```{r, out.width="100%"}
+unique_counts <- sapply(metabolomics.ext.jobs.simple, function(x) length(unique(x)))
+
+data.frame(
+  Column = names(unique_counts),
+  Unique_Values = as.numeric(unique_counts),
+  row.names = NULL
+) %>%
+  arrange(desc(Unique_Values)) %>%
+  knitr::kable()
+```
+
+## analyses dataframe
+
+```{r, out.width="100%"}
+unique_counts <- sapply(metabolomics.ext.analyses.simple, function(x) length(unique(x)))
+
+data.frame(
+  Column = names(unique_counts),
+  Unique_Values = as.numeric(unique_counts),
+  row.names = NULL
+) %>%
+  arrange(desc(Unique_Values)) %>%
+  knitr::kable()
+```
+
+## analyses dataframe conclusions
+
+there is no linkage between the lines in analyses and faculty/researcher - except maybe via id
+
+# Create an labs.original column
+
+```{r}
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab.original = lab)
+```
+
+## Repair Faculty names
+
+```{r}
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Vander Heiden", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("MVH", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Vander Heiden ", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("MVH Lab ", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("vander heiden", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Vander Heiden Lab", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Matthew Vander Heiden", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Vander Heiden Lab ", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("MVH lab", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Matt Vander Heiden", lab, ignore.case = FALSE), "Vander Heiden, Matthew G.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Weissman", lab, ignore.case = FALSE), "Weissman, Jonathan", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("weissman", lab, ignore.case = FALSE), "Weissman, Jonathan", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Weissman Lab ", lab, ignore.case = FALSE), "Weissman, Jonathan", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Weissman lAb ", lab, ignore.case = FALSE), "Weissman, Jonathan", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Yilmaz Lab", lab, ignore.case = FALSE), "Yilmaz, Omer", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Yilmaz, Omer ", lab, ignore.case = FALSE), "Yilmaz, Omer", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Omer Yilmaz ", lab, ignore.case = FALSE), "Yilmaz, Omer", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Omer Yilmaz", lab, ignore.case = FALSE), "Yilmaz, Omer", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Yilmaz, Omer", lab, ignore.case = FALSE), "Yilmaz, Omer", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Yilmaz", lab, ignore.case = FALSE), "Yilmaz, Omer", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Young", lab, ignore.case = FALSE), "Young, Richard", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Young Lab", lab, ignore.case = FALSE), "Young, Richard", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Nabel", lab, ignore.case = FALSE), "Nabel, Christopher", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Nabel Lab", lab, ignore.case = FALSE), "Nabel, Christopher", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Hemann Lab", lab, ignore.case = FALSE), "Hemann, Michael", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Hammond", lab, ignore.case = FALSE), "Hammond, Paula T", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Henry", lab, ignore.case = FALSE), "Henry, Whitney", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Wittrup", lab, ignore.case = FALSE), "Wittrup, Karl Dane", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Biology/Sauer Lab", lab, ignore.case = FALSE), "Sauer, Robert T", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Rakesh K Jain \\(Steele labs MGH\\)", lab, ignore.case = FALSE), "Jain, Rakesh", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Jain ", lab, ignore.case = FALSE), "Jain, Rakesh", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Jain", lab, ignore.case = FALSE), "Jain, Rakesh", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("lehmann", lab, ignore.case = FALSE), "Lehmann, Ruth", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Lehmann", lab, ignore.case = FALSE), "Lehmann, Ruth", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Cima lab ", lab, ignore.case = FALSE), "Cima, Michael J", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Voigt", lab, ignore.case = FALSE), "Voigt, Christopher A.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Voigt Lab", lab, ignore.case = FALSE), "Voigt, Christopher A.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Ringel Lab", lab, ignore.case = FALSE), "Ringel, Alison", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Ringel", lab, ignore.case = FALSE), "Ringel, Alison", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Langer", lab, ignore.case = FALSE), "Langer, Robert", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Bartel", lab, ignore.case = FALSE), "Bartel, David", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Jianzhu Chen", lab, ignore.case = FALSE), "Chen, Jianzhu", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Guarente Lab", lab, ignore.case = FALSE), "Guarente, Leonard", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Hrvatin", lab, ignore.case = FALSE), "Hrvatin, Sinisa", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Hrvatin lab", lab, ignore.case = FALSE), "Hrvatin, Sinisa", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Walker Lab", lab, ignore.case = FALSE), "Walker, Graham C", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Jaenisch lab", lab, ignore.case = FALSE), "Jaenisch, Rudolf", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Collins lab", lab, ignore.case = FALSE), "Collins, James J.", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Gene-Wei Li", lab, ignore.case = FALSE), "Li, Gene Wei", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Michael T. Laub", lab, ignore.case = FALSE), "Laub, Michael T", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Backman Lab", lab, ignore.case = FALSE), "Backman, Lindsey", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Seager Lab", lab, ignore.case = FALSE), "Seager, Sara", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Stephanopoulos", lab, ignore.case = FALSE), "Stephanopoulos, Gregory", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("INFINITY", lab, ignore.case = FALSE), "Infinity", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Jonathan Strecker", lab, ignore.case = FALSE), "Strecker, Jonathan", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Feng Zhang", lab, ignore.case = FALSE), "Zhang, Feng", lab))
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(lab = ifelse(grepl("Weiskopf Lab", lab, ignore.case = FALSE), "Weiskoph, Kipp,", lab))
+```
+
+# Export Jobs lab data
+
+```{r}
+metabolomics.ext.lab.data <- metabolomics.ext.jobs.simple %>% dplyr::select(lab.original,lab)
+```
+
+```{r}
+metabolomics.ext.lab.data.distinct <- metabolomics.ext.lab.data %>% dplyr::distinct()
+```
+
+```{r}
+write.xlsx(metabolomics.ext.lab.data.distinct,"../data/metabolomics.ext.lab.data.xlsx")
+```
+
+## Generate a quantity column by summing polar lipid other
+
+```{r}
+metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(Quantity = rowSums(across(c(polar, lipid, other)), na.rm = TRUE))
+```
+
+### Select relevant columns
+
+```{r}
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple %>% dplyr::select(lab,id,updated_at,type_of_analysis,email,service_name,amount_of_material,Quantity,notes)
+```
+
+### Repair the date
+
+The imported dates are in a machine-readable format that is not
+valuable. convert to human readable:
+
+```{r}
+metabolomics.ext.jobs.simple.subset$Purchase.Date <- as.Date(metabolomics.ext.jobs.simple.subset$updated_at, origin = "1899-12-30")
+```
+
+### remove the old date
+
+```{r}
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::select(-updated_at)
+```
+
+### Rename columns to match ilabs
+
+```{r}
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::rename(Customer.Lab = lab)
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::rename(Service.ID = id)
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::rename(Customer.Name = email)
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::rename(Service.Type = type_of_analysis)
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::rename(Charge.Name = service_name)
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::rename(Category = amount_of_material)
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::rename(Notes = notes)
+```
+
+### Add missing columns needed to match ilabs data
+
+```{r}
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Customer.Institute = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Customer.Department = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Unit.of.Measure = "sample")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Price = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Price.Type = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Total.Price = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Core.Name = "metabolomics")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Center = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Usage.Type = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(Core.ID = "")
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::mutate(temp.Inst = "")
+```
+
+### Add Faculty Annotation
+
+```{r}
+dim(metabolomics.ext.jobs.simple.subset)
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>%
+  merge(faculty.groups.toJoin, 
+        by.x = "Customer.Lab", 
+        by.y = "Fac.Key", 
+        all.x = TRUE, 
+        all.y = FALSE)
+dim(metabolomics.ext.jobs.simple.subset)
+```
+
+### Reorder columns to match ilabs
+
+```{r}
+metabolomics.ext.jobs.simple.subset <- metabolomics.ext.jobs.simple.subset %>% dplyr::select(Customer.Lab,Service.ID,Service.Type,Customer.Name,Customer.Department,Customer.Institute,Charge.Name,
+                                               Notes,Unit.of.Measure,Quantity,Price,Total.Price,Price.Type,Purchase.Date,Core.Name,Center,
+                                               Category,Usage.Type,Core.ID,temp.Inst,Fac.Group)
+```
+
+# Join ilabs and WI metabolomics
+
+```{r}
+ki.ilabs.biopol.plusWImetabolomics <- rbind(ki.ilabs.simple.final.biopol,metabolomics.ext.jobs.simple.subset)
+```
+
+```{r}
+write.xlsx(ki.ilabs.biopol.plusWImetabolomics,"biopolymers_proteomics_metabolomics.xlsx")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "dataCleaning_biopol_proteomics_metabolomics_sessionInfo.txt")
+```

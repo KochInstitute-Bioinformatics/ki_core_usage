@@ -1,0 +1,3 @@
+"0","ilabs <- read.xlsx(""../data/stock_ilabs.xlsx"")"
+"0","ilabs.flow <- ilabs %>% dplyr::filter(Core.Name == ""Flow Cytometry Core"")"
+"0","rm(ilabs)"

@@ -1,0 +1,8 @@
+"0",""
+"0","combo.bar <- sort.bar + analysis.bar + cyt.bar + plot_layout(ncol = 3, guides = ""collect"")"
+"0","ggsave(""figures/Flow_combo.bar.pdf"", "
+"0","       plot = combo.bar, "
+"0","       dpi = 150, "
+"0","       width = 15, "
+"0","       height = 5, "
+"0","       units = ""in"")"

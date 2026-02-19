@@ -1,0 +1,6 @@
+"0","msbp.final <- msbp.final %>%"
+"0","  dplyr::mutate(Sponsor = case_when("
+"0","    Core.Name == ""Biopolymers & Proteomics Core"" ~ BioPol_Sponsor,"
+"0","    Core.Name == ""metpro"" ~ MetPro_Sponsor,"
+"0","    TRUE ~ NA_character_"
+"0","  ))"

@@ -1,0 +1,18 @@
+# Ignore directories ending with _cache
+*_cache/
+
+# Ignore directories ending with _files
+*_files/
+
+# Ignore specific directories
+.cache/
+R/
+.local/
+.config/
+
+# Ignore VSCode workspace file
+.Rhistory
+KI_core_usage.code-workspace
+data/01012020_12312022_ALL_Cores_Completed.csv
+data/01012023_10312025_ALL_Cores_Completed.csv
+data/stock_ilabs.xlsx

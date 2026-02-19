@@ -1,0 +1,44 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxua2kuaWxhYnMuc2ltcGxlIDwtIGtpLmlsYWJzLnNpbXBsZSAlPiVcbiAgbXV0YXRlKEN1c3RvbWVyLkxhYiA9IGNhc2Vfd2hlbihcbiAgICBDdXN0b21lci5MYWIgPT0gXCJBZ25paG90cmksIFNhbWVlciAoUElUVClMYWJcIiB+IFwiQWduaWhvdHJpLCBTYW1lZXIgKFBJVFQpIExhYlwiLFxuICAgIFRSVUUgfiBDdXN0b21lci5MYWJcbiAgKSlcblxua2kuaWxhYnMuc2ltcGxlIDwtIGtpLmlsYWJzLnNpbXBsZSAlPiVcbiAgbXV0YXRlKEN1c3RvbWVyLkxhYiA9IGNhc2Vfd2hlbihcbiAgICBDdXN0b21lci5MYWIgPT0gXCJWaXJlbmRhciBLYXVzaGlrIChDRG9ULCBCcm9hZCBJbnN0aXR1dGUpXCIgfiBcIlZpcmVuZGFyIEthdXNoaWsgKEJyb2FkKSBMYWJcIixcbiAgICBUUlVFIH4gQ3VzdG9tZXIuTGFiXG4gICkpXG5cbmtpLmlsYWJzLnNpbXBsZSA8LSBraS5pbGFicy5zaW1wbGUgJT4lXG4gIG11dGF0ZShDdXN0b21lci5MYWIgPSBjYXNlX3doZW4oXG4gICAgQ3VzdG9tZXIuTGFiID09IFwiR2FyZywgU2FsaWwgKExhYilcIiB+IFwiR2FyZywgU2FsaWwgKEtvY2gpIExhYlwiLFxuICAgIFRSVUUgfiBDdXN0b21lci5MYWJcbiAgKSlcbmBgYCJ9 -->
+
+```r
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Agnihotri, Sameer (PITT)Lab\" ~ \"Agnihotri, Sameer (PITT) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Virendar Kaushik (CDoT, Broad Institute)\" ~ \"Virendar Kaushik (Broad) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Garg, Salil (Lab)\" ~ \"Garg, Salil (Koch) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Agnihotri, Sameer (PITT)Lab\" ~ \"Agnihotri, Sameer (PITT) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Virendar Kaushik (CDoT, Broad Institute)\" ~ \"Virendar Kaushik (Broad) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Garg, Salil (Lab)\" ~ \"Garg, Salil (Koch) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+```"

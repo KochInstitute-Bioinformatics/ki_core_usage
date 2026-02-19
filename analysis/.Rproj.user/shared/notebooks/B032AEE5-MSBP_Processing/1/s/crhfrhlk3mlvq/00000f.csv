@@ -1,0 +1,8 @@
+"0","metpro <- metpro %>% dplyr::rename(Customer.Name = person_name)"
+"0","metpro <- metpro %>% dplyr::rename(Customer.Institute = inst_name)"
+"0","metpro <- metpro %>% dplyr::rename(Customer.Lab = lab_name)"
+"0","metpro <- metpro %>% dplyr::rename(Purchase.Date = service_date)"
+"0","metpro <- metpro %>% dplyr::rename(Charge.Name = service_name)"
+"0","metpro <- metpro %>% dplyr::rename(Quantity = qty)"
+"0","metpro <- metpro %>% dplyr::rename(Price = unit_price)"
+"0","metpro <- metpro %>% dplyr::rename(Total.Price= amount)"

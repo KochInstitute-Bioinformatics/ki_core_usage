@@ -1,0 +1,12 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxud3JpdGUueGxzeChoYW5kLmlsYWJzLmJtYy5wcm90LGZpbGU9XCJjb21iaW5lZEZhYy5hbm5vdC54bHN4XCIpXG5gYGAifQ== -->
+
+```r
+write.xlsx(hand.ilabs.bmc.prot,file=\"combinedFac.annot.xlsx\")
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+write.xlsx(hand.ilabs.bmc.prot,file=\"combinedFac.annot.xlsx\")
+```"

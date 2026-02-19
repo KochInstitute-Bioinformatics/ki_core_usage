@@ -1,0 +1,6 @@
+"0","time.noCollapse <- time.noCollapse%>% dplyr::mutate("
+"0","  Quant.To.Present = dplyr::case_when("
+"0","    Charge.Name == ""Agilent 1100 HPLC -Daily"" ~ Quantity * 8,"
+"0","    TRUE ~ Quantity  # default case"
+"0","  )"
+"0",")"

@@ -1,0 +1,24 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaGFuZC5ibWMgPC0gcmVhZC54bHN4KFwiYm1jX0xBQi5kZl9tYW51YWxlZGl0cy54bHN4XCIpXG5oYW5kLmJtYyA8LSBoYW5kLmJtYyAlPiUgcmVuYW1lKGJtYy5GYWMuS2V5Lm5vRHVwcyA9IEZhYy5LZXkuTm9EdXBzKVxuaGFuZC5ibWMgPC0gaGFuZC5ibWMgJT4lIHJlbmFtZShibWMuTEFCID0gTEFCKVxuaGFuZC5ibWMucGl2b3RlZCA8LSBoYW5kLmJtYyAlPiVcbiAgZ3JvdXBfYnkoYm1jLkZhYy5LZXkubm9EdXBzKSAlPiVcbiAgc3VtbWFyaXNlKGJtYy5MQUIgPSBwYXN0ZShibWMuTEFCLCBjb2xsYXBzZSA9IFwiLCBcIiksIC5ncm91cHMgPSBcImRyb3BcIikgJT4lXG4gIHNlbGVjdChibWMuRmFjLktleS5ub0R1cHMsIGJtYy5MQUIpXG5gYGAifQ== -->
+
+```r
+hand.bmc <- read.xlsx(\"bmc_LAB.df_manualedits.xlsx\")
+hand.bmc <- hand.bmc %>% rename(bmc.Fac.Key.noDups = Fac.Key.NoDups)
+hand.bmc <- hand.bmc %>% rename(bmc.LAB = LAB)
+hand.bmc.pivoted <- hand.bmc %>%
+  group_by(bmc.Fac.Key.noDups) %>%
+  summarise(bmc.LAB = paste(bmc.LAB, collapse = \", \"), .groups = \"drop\") %>%
+  select(bmc.Fac.Key.noDups, bmc.LAB)
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+hand.bmc <- read.xlsx(\"bmc_LAB.df_manualedits.xlsx\")
+hand.bmc <- hand.bmc %>% rename(bmc.Fac.Key.noDups = Fac.Key.NoDups)
+hand.bmc <- hand.bmc %>% rename(bmc.LAB = LAB)
+hand.bmc.pivoted <- hand.bmc %>%
+  group_by(bmc.Fac.Key.noDups) %>%
+  summarise(bmc.LAB = paste(bmc.LAB, collapse = \", \"), .groups = \"drop\") %>%
+  select(bmc.Fac.Key.noDups, bmc.LAB)
+```"

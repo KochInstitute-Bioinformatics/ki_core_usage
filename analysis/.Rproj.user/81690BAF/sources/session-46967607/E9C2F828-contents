@@ -1,0 +1,485 @@
+---
+title: "Flow - Data Cleaning, Summary, and Visualizations"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "2/15/2026"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2,
+  fig.width = 6,
+  fig.height = 6,
+  dpi = 300
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+library(patchwork)
+```
+
+# Data Import
+
+## Faculty/Lab Annotations using Faculty.key
+
+A reference file has been generated that associates faculty and/or lab values that appear in all accounting data with a harmonized faculty key
+This file is a work in progress
+
+### Import faculty data
+
+```{r}
+fac.key <- read.xlsx("../data/FacultyKeys.xlsx")
+```
+
+### Read in ilabs stock data and select Flow Cytometry Core rows
+
+```{r}
+ilabs <- read.xlsx("../data/stock_ilabs.xlsx")
+ilabs.flow <- ilabs %>% dplyr::filter(Core.Name == "Flow Cytometry Core")
+rm(ilabs)
+```
+
+### Exclude Nanowell services 
+
+The nanowell core services are included in Flow Cytometry ilabs data and need to be excluded - they will be reported on in the HTS section
+
+```{r}
+cat("Dimensions of ilabs.flow before exlusion of nanowell:", dim(ilabs.flow), "\n")
+ilabs.flow <- ilabs.flow %>% dplyr::filter(Category %in% c("Analysis Machines", "Cell Sorting Equipment"))
+cat("Dimensions of ilabs.flow after exlusion of nanowell:", dim(ilabs.flow), "\n")
+```
+
+### Repair date
+
+```{r}
+ilabs.flow$Purchase.Date <- as.Date(ilabs.flow$Purchase.Date, origin = "1899-12-30")
+```
+
+### Check dates before reporting range selection
+
+```{r, fig.width=12,fig.height=5}
+ilabs.flow %>%
+  mutate(Year_Month = floor_date(Purchase.Date, "month")) %>%
+  count(Year_Month) %>%
+  arrange(Year_Month) %>%
+  ggplot(aes(x = Year_Month, y = n)) +
+  geom_col(fill = "steelblue") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  labs(title = "Records by Month",
+       x = "Month",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Select reporting date range
+
+```{r}
+cat("Dimensions of ilabs.flow before reporting range selection:", dim(ilabs.flow), "\n")
+ilabs.flow <- ilabs.flow %>% dplyr::filter(between(Purchase.Date, as.Date("2020-05-01"), as.Date("2025-10-31")))
+cat("Dimensions of ilabs.flow after reporting range selection:", dim(ilabs.flow), "\n")
+```
+
+### Check dates after reporting range selection
+
+```{r, fig.width=12,fig.height=5}
+ilabs.flow %>%
+  mutate(Year_Month = floor_date(Purchase.Date, "month")) %>%
+  count(Year_Month) %>%
+  arrange(Year_Month) %>%
+  ggplot(aes(x = Year_Month, y = n)) +
+  geom_col(fill = "steelblue") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  labs(title = "Records by Month",
+       x = "Month",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+# Service Annotation
+
+## Simplify Charge.Name
+
+The Charge.Name data is "|" separated values, the first value is most useful, extract it and store in a new column
+
+```{r}
+ilabs.flow <- ilabs.flow %>% mutate(Charge.Name.Simple = str_trim(str_extract(Charge.Name, "^[^|]*")))
+```
+
+## Examine Service.Type column
+
+One spurious nanowell value remained - exclude it here
+
+```{r}
+table(ilabs.flow$Service.Type)
+ilabs.flow <- ilabs.flow %>% dplyr::filter(Service.Type != "Nanowell cytometry device")
+table(ilabs.flow$Service.Type)
+```
+
+## Examine the data
+
+```{r}
+table(ilabs.flow$Category)
+# table(ilabs.flow$Charge.Name.Simple)
+```
+
+### Update category with Imaging Cytometry
+
+```{r}
+ilabs.flow <- ilabs.flow %>%
+  mutate(Category = if_else(str_starts(Charge.Name.Simple, "Amnis"), 
+                             "Imaging Cytometry", 
+                             Category))
+```
+
+# Faculty Annotation Work
+
+## Associate Faculty.Key with ilabs data
+
+```{r}
+ilabs.flow <- ilabs.flow %>%
+  left_join(fac.key %>%
+              select(ValueInData, Faculty.Key) %>%
+              distinct(), 
+            by = c("Customer.Lab" = "ValueInData"))
+```
+
+## Import lab annotation data
+
+NOTE: Once flow sponsor groups are finalized, remove the tmp designation
+
+```{r}
+fac.annot <- read.xlsx("../data/annotated.Faculty.Keys_tmp.xlsx")
+```
+
+### Join to ilabs.flow using Faculty.Key
+
+```{r}
+ilabs.flow <- ilabs.flow %>%
+  dplyr::left_join(
+    fac.annot %>% dplyr::select(Faculty.Key, Flow_Sponsor),
+    by = "Faculty.Key"
+  )
+```
+
+## Simplify sponsor associations for plotting
+
+### Import simplified categories
+
+```{r}
+sponsor.toPlot <- read.xlsx("../data/sponsor.Keys.ForPlotting.xlsx")
+```
+
+```{r}
+sponsor.toPlot
+```
+
+### Join to ilabs.flow using
+
+```{r}
+ilabs.flow <- ilabs.flow %>%
+  dplyr::left_join(sponsor.toPlot, by = c("Flow_Sponsor" = "Sponsor"))
+```
+
+# Data Visualizations
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "steelblue",
+  "Non_Sponsor" = "orange"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "Non_Sponsor")
+```
+
+## Subset the data for plotting
+
+```{r}
+flow.forBarchart <- ilabs.flow %>% dplyr::select(Category,Quantity,Sponsor_ForPlot)
+```
+
+## Draw the combined barchart
+
+```{r,fig.width=8,fig.height=6}
+ilabs.flow %>%
+  filter(Category %in% c("Cell Sorting Equipment", "Analysis Machines", "Imaging Cytometry")) %>%
+  mutate(
+    Category_Label = factor(Category, 
+                            levels = c("Cell Sorting Equipment", "Analysis Machines", "Imaging Cytometry"),
+                            labels = c("Sorting", "Analysis", "Imaging Cytometry")),
+    Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)
+  ) %>%
+  group_by(Category_Label, Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), .groups = "drop") %>%
+  group_by(Category_Label) %>%
+  mutate(Total = sum(Quantity),
+         Percent = round((Quantity / Total) * 100, 0)) %>%
+  ungroup() %>%
+  ggplot(aes(x = Category_Label, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(Percent, "%")), 
+            position = position_dodge(width = 0.9),
+            vjust = -0.5,
+            size = 3) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Equipment by Category and Sponsor",
+       x = "Category",
+       y = "Quantity (Hours)",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0))
+```
+
+## Three separate barcharts
+
+```{r}
+sort.bar <- ilabs.flow %>%
+  filter(Category == "Cell Sorting Equipment") %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Sorting",
+       x = "Sponsor Group",
+       y = "Hours",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+analysis.bar <- ilabs.flow %>%
+  filter(Category == "Analysis Machines") %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Analysis",
+       x = "Sponsor Group",
+       y = "Hours",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+cyt.bar <- ilabs.flow %>%
+  filter(Category == "Imaging Cytometry") %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Imaging Cytometry",
+       x = "Sponsor Group",
+       y = "Hours",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Plot the bar separate charts
+
+```{r,fig.width=14,fig.height=6}
+sort.bar + analysis.bar + cyt.bar + plot_layout(ncol = 3, guides = "collect")
+
+combo.bar <- sort.bar + analysis.bar + cyt.bar + plot_layout(ncol = 3, guides = "collect")
+ggsave("figures/Flow_combo.bar.pdf", 
+       plot = combo.bar, 
+       dpi = 150, 
+       width = 14, 
+       height = 6, 
+       units = "in")
+```
+
+## Pie chart versions
+
+```{r}
+sort.pie <- ilabs.flow %>%
+  filter(Category == "Cell Sorting Equipment") %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, " hours\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Sorting",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+analysis.pie <- ilabs.flow %>%
+  filter(Category == "Analysis Machines") %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, " hours\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Analysis",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+cyt.pie <- ilabs.flow %>%
+  filter(Category == "Imaging Cytometry") %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, " hours\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Imaging Cytometry",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+### Plot the pie charts
+
+```{r,fig.width=14,fig.height=5}
+sort.pie + analysis.pie + cyt.pie + plot_layout(ncol = 3, guides = "collect")
+
+combo.pie <- sort.pie + analysis.pie + cyt.pie + plot_layout(ncol = 3, guides = "collect")
+ggsave("figures/Flow_combo.pie.pdf", 
+       plot = combo.pie, 
+       dpi = 150, 
+       width = 14, 
+       height = 5, 
+       units = "in")
+```
+
+# Write annotated output file
+
+```{r}
+write.xlsx(ilabs.flow,"flow.final.xlsx")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "Flow_Processing_sessionInfo.txt")
+```

@@ -1,0 +1,14 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2Vzc2lvbkluZm8oKVxud3JpdGVMaW5lcyhjYXB0dXJlLm91dHB1dChzZXNzaW9uSW5mbygpKSwgXCJnZW5vbWljc19kYXRhX3Nlc3Npb25JbmZvLnR4dFwiKVxuYGBgIn0= -->
+
+```r
+sessionInfo()
+writeLines(capture.output(sessionInfo()), \"genomics_data_sessionInfo.txt\")
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+sessionInfo()
+writeLines(capture.output(sessionInfo()), \"genomics_data_sessionInfo.txt\")
+```"

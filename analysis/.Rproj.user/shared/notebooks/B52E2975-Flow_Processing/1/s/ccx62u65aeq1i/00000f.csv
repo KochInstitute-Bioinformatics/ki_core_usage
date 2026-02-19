@@ -1,0 +1,4 @@
+"0","ilabs.flow <- ilabs.flow %>%"
+"0","  mutate(Category = if_else(str_starts(Charge.Name.Simple, ""Amnis""), "
+"0","                             ""Imaging Cytometry"", "
+"0","                             Category))"

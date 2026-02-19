@@ -1,0 +1,5 @@
+"0","msbp.final <- msbp.final %>%"
+"0","  dplyr::left_join("
+"0","    msbp.Service.Groups %>% dplyr::select(Service.Group.working, Service.Group),"
+"0","    by = ""Service.Group.working"""
+"0","  )"

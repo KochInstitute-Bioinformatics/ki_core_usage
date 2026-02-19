@@ -1,0 +1,8 @@
+"0",""
+"0","combo.pie <- synth.pie + prot.pie + lip.met.pie + maldi.pie + time.pie + plot_layout(ncol = 5, guides = ""collect"")"
+"0","ggsave(""figures/MSBP_combo.pie.pdf"", "
+"0","       plot = combo.pie, "
+"0","       dpi = 150, "
+"0","       width = 16, "
+"0","       height = 4, "
+"0","       units = ""in"")"

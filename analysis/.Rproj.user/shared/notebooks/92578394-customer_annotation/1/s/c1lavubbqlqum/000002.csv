@@ -1,0 +1,16 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxua2kuaWxhYnMuc2ltcGxlICU+JVxuICBtdXRhdGUoQ3VzdG9tZXIuTGFiX3N0cmlwcGVkID0gc3RyX3RyaW0oc3RyX3JlbW92ZShDdXN0b21lci5MYWIsIFwiXi4qXFxcXClcIikpKSAlPiVcbiAgY291bnQoQ3VzdG9tZXIuTGFiX3N0cmlwcGVkLCBzb3J0ID0gVFJVRSlcbmBgYCJ9 -->
+
+```r
+ki.ilabs.simple %>%
+  mutate(Customer.Lab_stripped = str_trim(str_remove(Customer.Lab, \"^.*\\)\"))) %>%
+  count(Customer.Lab_stripped, sort = TRUE)
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+ki.ilabs.simple %>%
+  mutate(Customer.Lab_stripped = str_trim(str_remove(Customer.Lab, \"^.*\\)\"))) %>%
+  count(Customer.Lab_stripped, sort = TRUE)
+```"

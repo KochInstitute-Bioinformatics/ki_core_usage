@@ -1,0 +1,20 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxua2kuaWxhYnMuc2ltcGxlIDwtIGtpLmlsYWJzLnNpbXBsZSAlPiVcbiAgbXV0YXRlKEN1c3RvbWVyLkxhYiA9IGNhc2Vfd2hlbihcbiAgICBDdXN0b21lci5MYWIgPT0gXCJUcmF2ZXJzbywgKEdpbykgQ2FybG8gR2lvdmFubmkgKEtvY2gpIExhYlwiIH4gXCJUcmF2ZXJzbywgR2lvIChLb2NoKSBMYWJcIixcbiAgICBUUlVFIH4gQ3VzdG9tZXIuTGFiXG4gICkpXG5gYGAifQ== -->
+
+```r
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Traverso, (Gio) Carlo Giovanni (Koch) Lab\" ~ \"Traverso, Gio (Koch) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == \"Traverso, (Gio) Carlo Giovanni (Koch) Lab\" ~ \"Traverso, Gio (Koch) Lab\",
+    TRUE ~ Customer.Lab
+  ))
+```"

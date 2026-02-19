@@ -1,0 +1,31 @@
+"0","msbp.final %>%"
+"0","filter(!is.na(Service.Group)) %>%"
+"0","group_by(Service.Group, Sponsor_ForPlot) %>%"
+"0","summarise(Total = sum(Adjusted.Total.Price, na.rm = TRUE), .groups = 'drop') %>%"
+"0","group_by(Service.Group) %>%"
+"0","mutate(Service.Group.Total = sum(Total)) %>%"
+"0","ungroup() %>%"
+"0","mutate("
+"0","Service.Group = fct_reorder(Service.Group, Service.Group.Total, .desc = TRUE),"
+"0","Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)"
+"0",") %>%"
+"0","ggplot(aes(x = Service.Group, y = Total, fill = Sponsor_ForPlot)) +"
+"0","geom_bar(stat = ""identity"") +"
+"0","scale_fill_manual(values = sponsor_colors) +"
+"0","theme_minimal() +"
+"0","theme("
+"0","axis.text.x = element_text(angle = 45, hjust = 1),"
+"0","plot.title = element_text(hjust = 0.5, size = 14, face = ""bold"")"
+"0",") +"
+"0","labs("
+"0","title = ""Adjusted Total Price by Service Group and Sponsor"","
+"0","x = ""Service Group"","
+"0","y = ""Adjusted Total Price ($)"","
+"0","fill = ""Sponsor"""
+"0",")"
+"1","[1m[33mError[39m in `filter()`:[22m
+[38;5;232m[36mℹ[38;5;232m In argument: `!is.na(Service.Group)`.[39m
+[1mCaused by error:[22m
+[33m![39m object 'Service.Group' not found
+[90mRun `]8;;x-r-run:rlang::last_trace()rlang::last_trace()]8;;` to see where the error occurred.[39m
+"

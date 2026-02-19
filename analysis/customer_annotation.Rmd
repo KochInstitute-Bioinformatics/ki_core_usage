@@ -1,0 +1,115 @@
+---
+title: "Customer Annotation Utility"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "1/19/2026"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2,
+  fig.width = 6,
+  fig.height = 6,
+  dpi = 300
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+```
+
+# Data Import
+
+## Import Existing Faculty Keys
+
+An excel file has been manually created that associates customer lab information from different sources (ilabs, bmc external, mp&b metpro), as they appear in the source files, with a harmonized faculty key
+
+```{r}
+Faculty.Keys <- read.xlsx("../data/FacultyKeys.xlsx")
+```
+
+### Examine the data
+
+```{r}
+head(Faculty.Keys)
+```
+
+### Count the different sources
+
+```{r}
+table(Faculty.Keys$Source)
+```
+
+### Count the number of distinct Faculty.Keys
+
+```{r}
+n_distinct(Faculty.Keys$Faculty.Key)
+```
+
+### Create a dataframe of distinct faculty keys
+
+```{r}
+Unique.Keys <- Faculty.Keys %>% distinct(Faculty.Key)
+```
+
+## Import Working annotations
+
+```{r}
+KI.annotations <- read.xlsx("Unique.Keys.plusKI.plusSponsor.Manual.cwRepairs.xlsx")
+```
+
+### Join KI.annotations to Faculty.Key
+
+```{r}
+annotated.Keys <- Faculty.Keys %>% left_join(KI.annotations, by = "Faculty.Key")
+```
+
+### Select samples that need work
+
+```{r}
+needsWork <- annotated.Keys %>% dplyr::filter(IGT_DSMI_Sponsor == "need more info")
+```
+
+```{r}
+write.xlsx(needsWork,file="needsWork.xlsx")
+```
+
+# Write annotated faculty output file
+
+```{r}
+# write.xlsx(Unique.Keys.plusKI.plusSponsor,file="Unique.Keys.plusKI.plusSponsor.xlsx")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "customer_annotation_sessionInfo.txt")
+```

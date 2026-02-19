@@ -1,0 +1,5 @@
+"0","metpro.to_rbind <- metpro %>%"
+"0","  dplyr::select(Service.ID, Service.Type, Customer.Name, Customer.Lab, Customer.Department, "
+"0","                Customer.Institute, Charge.Name, Notes, Unit.of.Measure, Quantity, Price, "
+"0","                Total.Price, Price.Type, Purchase.Date, Core.Name, Center, Category, "
+"0","                Usage.Type)"

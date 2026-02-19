@@ -1,0 +1,12 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuTVNQU19jdXN0b21lcnMgPC0gcmVhZC54bHN4KClcbmBgYCJ9 -->
+
+```r
+MSPS_customers <- read.xlsx()
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+MSPS_customers <- read.xlsx()
+```"

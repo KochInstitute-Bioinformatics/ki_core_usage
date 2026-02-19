@@ -1,0 +1,27 @@
+{
+    "id": "7A27EF28",
+    "path": "~/analysis/DSMI_processing.Rmd",
+    "project_path": "DSMI_processing.Rmd",
+    "type": "r_markdown",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1771457770967.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "367,0",
+        "scrollLine": "365",
+        "last_setup_crc32": "469676076cba0a5b"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1771503970,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1771503970226,
+    "read_only": false,
+    "read_only_alternatives": []
+}

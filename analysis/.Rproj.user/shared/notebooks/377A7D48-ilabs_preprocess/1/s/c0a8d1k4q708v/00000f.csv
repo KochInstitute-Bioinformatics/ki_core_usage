@@ -1,0 +1,4 @@
+"0","ki.ilabs.simple %>%"
+"0","  mutate(year = year(Purchase.Date)) %>%"
+"0","  group_by(year) %>%"
+"0","  summarize(total_quant = sum(Quantity))"

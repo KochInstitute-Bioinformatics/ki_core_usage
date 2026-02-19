@@ -1,0 +1,1 @@
+"0","metabolomics.ext.jobs.simple <- metabolomics.ext.jobs.simple %>% mutate(Quantity = rowSums(across(c(polar, lipid, other)), na.rm = TRUE))"

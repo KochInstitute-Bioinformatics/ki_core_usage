@@ -1,0 +1,2 @@
+"0","Customer.Lab.data <- as.data.frame(ki.ilabs.simple$Customer.Lab)"
+"0","write.xlsx(Customer.Lab.data,""../data/Customer.Lab.data_ilabs.xlsx"")"

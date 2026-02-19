@@ -1,0 +1,5 @@
+"0","ilabs.flow <- ilabs.flow %>%"
+"0","  left_join(fac.key %>%"
+"0","              select(ValueInData, Faculty.Key) %>%"
+"0","              distinct(), "
+"0","            by = c(""Customer.Lab"" = ""ValueInData""))"

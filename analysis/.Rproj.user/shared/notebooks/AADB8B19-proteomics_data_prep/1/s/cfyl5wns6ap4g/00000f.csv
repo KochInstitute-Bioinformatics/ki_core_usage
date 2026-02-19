@@ -1,0 +1,7 @@
+"0","metabolomics.ext.jobs.simple <- metabolomics.ext.jobs %>% dplyr::select(-all_of(simple.cols$column))"
+"0","dim(metabolomics.ext.jobs.simple)"
+"1","[1]"
+"1"," 470"
+"1","  36"
+"1","
+"

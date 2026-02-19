@@ -1,0 +1,5 @@
+"0","pep.synth <- msbp.final %>% dplyr::filter(Charge.Name %in% c(""0.1 mmole synthesis, set up"","
+"0","                                                              ""0.3 mmole synthesis, set up"","
+"0","                                                              ""0.5 mmole synthesis, set up"","
+"0","                                                              ""5 umole synthesis"","
+"0","                                                              ""SPOT synthesis, Cellulose Peptide Array""))"

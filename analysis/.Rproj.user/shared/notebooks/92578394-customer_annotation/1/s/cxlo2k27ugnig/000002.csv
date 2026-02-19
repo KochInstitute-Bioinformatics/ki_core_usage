@@ -1,0 +1,18 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaGFuZC5pbGFicy5ibWMucHJvdCA8LSBtZXJnZShoYW5kLmlsYWJzLmJtYywgaGFuZC5wcm90LnBpdm90ZWQsIFxuICAgICAgICAgICAgICAgICAgICAgICAgYnkueCA9IFwiRmFjLktleVwiLCBcbiAgICAgICAgICAgICAgICAgICAgICAgIGJ5LnkgPSBcInByb3QuRmFjLktleS5ub0R1cHNcIiwgXG4gICAgICAgICAgICAgICAgICAgICAgICBhbGwgPSBUUlVFKVxuYGBgIn0= -->
+
+```r
+hand.ilabs.bmc.prot <- merge(hand.ilabs.bmc, hand.prot.pivoted, 
+                        by.x = \"Fac.Key\", 
+                        by.y = \"prot.Fac.Key.noDups\", 
+                        all = TRUE)
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+hand.ilabs.bmc.prot <- merge(hand.ilabs.bmc, hand.prot.pivoted, 
+                        by.x = \"Fac.Key\", 
+                        by.y = \"prot.Fac.Key.noDups\", 
+                        all = TRUE)
+```"

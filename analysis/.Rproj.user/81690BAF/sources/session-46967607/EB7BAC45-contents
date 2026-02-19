@@ -1,0 +1,966 @@
+---
+title: "MSBP - Data Cleaning, Summary, and Visualizations"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "2/16/2026"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE
+#  fig.retina = 2,
+#  fig.width = 4,
+#  fig.height = 4,
+#  dpi = 150
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+library(patchwork)
+```
+
+# Data Import
+
+## Read in ilabs stock data and select Biopolymers rows
+
+```{r}
+ilabs <- read.xlsx("../data/stock_ilabs.xlsx")
+ilabs.msbp <- ilabs %>% dplyr::filter(Core.Name == "Biopolymers & Proteomics Core")
+rm(ilabs)
+```
+
+### Repair date
+
+```{r}
+ilabs.msbp$Purchase.Date <- as.Date(ilabs.msbp$Purchase.Date, origin = "1899-12-30")
+```
+
+## Read in METPRO invoice data
+
+```{r}
+metpro24 <- read.xlsx("../data/METPRO_2024_Core Charges by Service.xlsx")
+metpro25 <- read.xlsx("../data/METPRO2025_Core Charges by Service.xlsx")
+```
+
+### Combine data files
+
+```{r}
+metpro <- rbind(metpro24,metpro25)
+```
+
+# Export metpro faculty/lab data and manually update annotations
+
+This has already been done but will need to be repeated when new data are incorporated.
+
+```{r}
+# metpro.lab.data <- metpro %>% dplyr::select(lab_name)
+# metpro.lab.data.distinct <- metpro.lab.data %>% dplyr::distinct()
+# write.xlsx(metpro.lab.data.distinct,"../data/metpro.lab.data.distinct.xlsx")
+```
+
+# Data Repair - metpro
+
+## simplify the metpro dataframe
+
+This first step identifies empty or near-empty columns and summarizes
+the results. The metpro data as none of these low complexity columns.
+
+```{r}
+# simple.cols <- map_df(names(metpro), ~{
+#   col <- metpro[[.]]
+#   n_unique <- n_distinct(col[!is.na(col)])
+#   
+#   tibble(
+#     column = .,
+#     value = if_else(all(is.na(col)), 
+#                     "empty",
+#                     if_else(n_unique == 1,
+#                            as.character(unique(col[!is.na(col)])[1]),
+#                            NA_character_))
+#   )
+# }) %>%
+#   filter(!is.na(value))
+# 
+# kable(simple.cols, format = "simple")
+```
+
+If the data frame had these columns, they could be excluded with this code. 
+
+```{r}
+# cat("Dimensions before simple column exclusion:", dim(metpro), "\n")
+# metpro <- metpro %>% dplyr::select(-all_of(simple.cols$column))
+# cat("Dimensions after simple column exclusion:", dim(metpro), "\n")
+```
+
+# Examination of metabolomics dataframes
+
+Summarize the number of unique values per column.
+
+```{r, out.width="100%"}
+unique_counts <- sapply(metpro, function(x) length(unique(x)))
+
+data.frame(
+  Column = names(unique_counts),
+  Unique_Values = as.numeric(unique_counts),
+  row.names = NULL
+) %>%
+  arrange(desc(Unique_Values)) %>%
+  knitr::kable()
+```
+
+## Compare column names in ilabs.msbp and metpro
+
+```{r}
+colnames(ilabs.msbp)
+colnames(metpro)
+```
+
+### Repair the metpro date
+
+The imported dates are in a machine-readable format that is not
+valuable. convert to human readable:
+
+```{r}
+metpro$service_date <- as.Date(metpro$service_date, origin = "1899-12-30")
+```
+
+### Rename columns to match ilabs
+
+```{r}
+metpro <- metpro %>% dplyr::rename(Customer.Name = person_name)
+metpro <- metpro %>% dplyr::rename(Customer.Institute = inst_name)
+metpro <- metpro %>% dplyr::rename(Customer.Lab = lab_name)
+metpro <- metpro %>% dplyr::rename(Purchase.Date = service_date)
+metpro <- metpro %>% dplyr::rename(Charge.Name = service_name)
+metpro <- metpro %>% dplyr::rename(Quantity = qty)
+metpro <- metpro %>% dplyr::rename(Price = unit_price)
+metpro <- metpro %>% dplyr::rename(Total.Price= amount)
+```
+
+### Add missing columns needed to match ilabs data
+
+```{r}
+metpro <- metpro %>% dplyr::mutate(Service.ID = "metpro")
+metpro <- metpro %>% dplyr::mutate(Service.Type = "ToUpdate")
+metpro <- metpro %>% dplyr::mutate(Customer.Department = "")
+metpro <- metpro %>% dplyr::mutate(Unit.of.Measure = "ToUpdate")
+metpro <- metpro %>% dplyr::mutate(Price.Type = "")
+metpro <- metpro %>% dplyr::mutate(Core.Name = "metpro")
+metpro <- metpro %>% dplyr::mutate(Center = "")
+metpro <- metpro %>% dplyr::mutate(Usage.Type = "")
+metpro <- metpro %>% dplyr::mutate(Notes = "")
+metpro <- metpro %>% dplyr::mutate(Category = "")
+```
+
+### Select ilabs columns from metpro
+
+```{r}
+metpro.to_rbind <- metpro %>%
+  dplyr::select(Service.ID, Service.Type, Customer.Name, Customer.Lab, Customer.Department, 
+                Customer.Institute, Charge.Name, Notes, Unit.of.Measure, Quantity, Price, 
+                Total.Price, Price.Type, Purchase.Date, Core.Name, Center, Category, 
+                Usage.Type)
+```
+
+# Join ilabs and WI metabolomics
+
+```{r}
+msbp.final <- rbind(ilabs.msbp,metpro.to_rbind)
+```
+
+## Remove problematic rows identified by SF (Polizzi and 2 NA rows identified by CAW)
+
+Find the rows:
+
+```{r}
+msbp.final %>% dplyr::filter(is.na(Customer.Lab) | Customer.Lab == "Polizzi Lab")
+```
+
+Remove them from the data frame:
+
+```{r}
+cat("Dimensions before NA and Polizzi exclusion:", dim(msbp.final), "\n")
+msbp.final <- msbp.final %>% dplyr::filter(!is.na(Customer.Lab) & Customer.Lab != "Polizzi Lab")
+cat("Dimensions after NA and Polizzi exclusion:", dim(msbp.final), "\n")
+```
+
+### Check dates before reporting range selection
+
+```{r, fig.width=12,fig.height=5}
+msbp.final %>%
+  mutate(Year_Month = floor_date(Purchase.Date, "month")) %>%
+  count(Year_Month) %>%
+  arrange(Year_Month) %>%
+  ggplot(aes(x = Year_Month, y = n)) +
+  geom_col(fill = "steelblue") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  labs(title = "Records by Month",
+       x = "Month",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Select reporting date range
+
+```{r}
+cat("Dimensions of ilabs.flow before reporting range selection:", dim(msbp.final), "\n")
+msbp.final <- msbp.final %>% dplyr::filter(between(Purchase.Date, as.Date("2020-05-01"), as.Date("2025-10-31")))
+cat("Dimensions of ilabs.flow after reporting range selection:", dim(msbp.final), "\n")
+```
+
+### Check dates after reporting range selection
+
+```{r, fig.width=12,fig.height=5}
+msbp.final %>%
+  mutate(Year_Month = floor_date(Purchase.Date, "month")) %>%
+  count(Year_Month) %>%
+  arrange(Year_Month) %>%
+  ggplot(aes(x = Year_Month, y = n)) +
+  geom_col(fill = "steelblue") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  labs(title = "Records by Month",
+       x = "Month",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+# Service Annotation
+
+## Gather categrories and output data
+
+Information about what was done is stored in 2 columns: Service.Type and Charge.Name
+there are 16 distinct entries in Service.Type but all 1167 from metpro are under-annotated
+Create a new column called Service.Group.working
+
+```{r}
+msbp.final <- msbp.final %>%
+  mutate(Service.Group.working = case_when(
+    Core.Name == "Biopolymers & Proteomics Core" ~ Service.Type,
+    Core.Name == "metpro" ~ Charge.Name,
+    TRUE ~ NA_character_  # default for any other cases
+  ))
+
+cat("Dimensions of Service.Group.working dataframe:", dim(as.data.frame(table(msbp.final$Service.Group.working))), "\n")
+
+msbp.Service.Group.working.df <- as.data.frame(table(msbp.final$Service.Group.working))
+write.xlsx(msbp.Service.Group.working.df,file="msbp.Service.Group.working.df.xlsx")
+```
+
+## Import manually annotated service groups
+
+Manually annotate Service.Group based on data in Service.Group.working and import the results
+
+```{r}
+msbp.Service.Groups <- read.xlsx("../data/msbp.Service.Group.Annotation.xlsx")
+```
+
+```{r}
+# msbp.Service.Groups
+```
+
+## Join Service.Group to msbp.final
+
+```{r}
+msbp.final <- msbp.final %>%
+  dplyr::left_join(
+    msbp.Service.Groups %>% dplyr::select(Service.Group.working, Service.Group),
+    by = "Service.Group.working"
+  )
+```
+
+# Faculty Annotation Work
+
+## Import faculty key data
+
+```{r}
+fac.key <- read.xlsx("../data/FacultyKeys.xlsx")
+```
+
+## Associate Faculty.Key with assembled msbp usage
+
+```{r}
+msbp.final <- msbp.final %>%
+  left_join(fac.key %>%
+              select(ValueInData, Faculty.Key) %>%
+              distinct(), 
+            by = c("Customer.Lab" = "ValueInData"))
+```
+
+## Import sponsor annotation data
+
+NOTE: Once ms&b sponsor groups are finalized, remove the tmp designation
+
+```{r}
+fac.annot <- read.xlsx("../data/annotated.Faculty.Keys_tmp.xlsx")
+```
+
+## Join to msbp.final using Faculty.Key
+
+```{r}
+msbp.final <- msbp.final %>%
+  dplyr::left_join(
+    fac.annot %>% dplyr::select(Faculty.Key, MetPro_Sponsor, BioPol_Sponsor),
+    by = "Faculty.Key"
+  )
+```
+
+# Rate Modifiers
+
+This is being paused now - using consistent units (each and hours instead)
+
+## Import rate modifier data
+
+```{r}
+# rate.mod <- read.xlsx("../data/rateModifiers.xlsx")
+# rate.mod
+```
+
+## Join the 2 different rate modifiers to msbp.final using SponsorCategory
+
+This should be validated by looking for Customer.Lab values that have more than 1 rate.modifier
+
+```{r}
+# msbp.final <- msbp.final %>%
+#   left_join(
+#     rate.mod %>% select(SponsorCategory, BP_modifier),
+#     by = c("BioPol_Sponsor" = "SponsorCategory")
+#   ) %>%
+#   left_join(
+#     rate.mod %>% select(SponsorCategory, metpro_modifier),
+#     by = c("MetPro_Sponsor" = "SponsorCategory")
+#   ) %>%
+#   mutate(rate.modifier = case_when(
+#     Core.Name == "Biopolymers & Proteomics Core" ~ BP_modifier,
+#     Core.Name == "metpro" ~ metpro_modifier,
+#     TRUE ~ NA_real_
+#   )) %>%
+#   select(-BP_modifier, -metpro_modifier)  # clean up temporary columns
+```
+
+# Create adjusted Total.Price values based on assigned rate.modifier values
+
+```{r}
+# msbp.final <- msbp.final %>% dplyr::mutate(Adjusted.Total.Price = Total.Price * rate.modifier)
+```
+
+# Create an aggregated sponsor category for plotting
+
+```{r}
+msbp.final <- msbp.final %>%
+  dplyr::mutate(Sponsor = case_when(
+    Core.Name == "Biopolymers & Proteomics Core" ~ BioPol_Sponsor,
+    Core.Name == "metpro" ~ MetPro_Sponsor,
+    TRUE ~ NA_character_
+  ))
+```
+
+## Simplify sponsor associations for plotting
+
+### Import simplified categories
+
+```{r}
+sponsor.toPlot <- read.xlsx("../data/sponsor.Keys.ForPlotting.xlsx")
+sponsor.toPlot
+```
+
+### Join to ilabs.flow using
+
+```{r}
+msbp.final <- msbp.final %>%
+  dplyr::left_join(sponsor.toPlot, by = c("Sponsor" = "Sponsor"))
+```
+
+# Data Visualizations
+
+## Define Colors
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "steelblue",
+  "MIT_Sponsor" = "lightpink",
+  "Non_Sponsor" = "orange"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+## Peptide Synthesis data
+
+### Extract the data from the main dataframe
+
+```{r}
+pep.synth <- msbp.final %>% dplyr::filter(Charge.Name %in% c("0.1 mmole synthesis, set up",
+                                                              "0.3 mmole synthesis, set up",
+                                                              "0.5 mmole synthesis, set up",
+                                                              "5 umole synthesis",
+                                                              "SPOT synthesis, Cellulose Peptide Array"))
+```
+
+### Add an adjusted plotting quantity
+
+```{r}
+pep.synth <- pep.synth %>% dplyr::mutate(Quant.To.Present = if_else(Charge.Name == "5 umole synthesis", 1, Quantity))
+```
+
+### Check the results
+
+```{r}
+table(pep.synth$Quant.To.Present,pep.synth$Charge.Name)
+```
+
+### Prepare a peptide synthesis bar chart
+
+```{r,fig.width=4,fig.height=4}
+synth.bar <- pep.synth %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quant.To.Present), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Peptide Synthesis",
+       x = "Sponsor Group",
+       y = "Syntheses",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+synth.bar
+```
+
+### Peptide synthesis pie chart
+
+```{r}
+synth.pie <- pep.synth %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quant.To.Present), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Peptide Synthesis",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+synth.pie
+```
+
+## Proteomics Data
+
+### Extract the data from the main dataframe
+
+```{r}
+prot <- msbp.final %>% dplyr::filter(Service.Group == "Proteomics") %>% 
+  dplyr::filter(!stringr::str_detect(Charge.Name, regex("Data Analysis", ignore_case = TRUE))) %>% 
+  dplyr::filter(!stringr::str_detect(Charge.Name, regex("\\(charge\\)", ignore_case = TRUE))) %>% 
+  dplyr::filter(!stringr::str_detect(Charge.Name, regex("MALDI", ignore_case = TRUE)))
+```
+
+### Check the results
+
+```{r}
+prot %>% dplyr::select(Charge.Name) %>% unique() %>% dim()
+```
+
+### Prepare Proteomics bar chart
+
+```{r,fig.width=5,fig.height=6}
+prot.bar <- prot %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Proteomics",
+       x = "Sponsor Group",
+       y = "Samples",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+prot.bar
+```
+
+### Prepare proteomics pie chart
+
+```{r}
+prot.pie <- prot %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Proteomics",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+prot.pie
+```
+
+## Lipid or Metabolite Profiling
+
+### Extract the data
+
+```{r}
+lip.met <- msbp.final %>% dplyr::filter(Service.Group == "Lipid or Metabolite Profiling")
+```
+
+### Check the results
+
+```{r}
+lip.met %>% dplyr::select(Charge.Name) %>% table() %>% as.data.frame()
+```
+
+### Prepare the Lipid or Metabolite bar chart
+
+```{r,fig.width=5,fig.height=6}
+lip.met.bar <- lip.met %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Lipid or Metabolite Profiling",
+       x = "Sponsor Group",
+       y = "Samples",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+lip.met.bar
+```
+### Prepare the Lipid or Metabolite pie chart
+
+```{r}
+lip.met.pie <- lip.met %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Lipid or Metabolite Profiling",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+lip.met.pie
+```
+
+## MALDI or HPLC
+
+### Extract the data
+
+```{r}
+maldi <- msbp.final %>% dplyr::filter(Charge.Name %in% c("MALDI additional mode run",
+                                                         "MALDI MS run","analytical run",
+                                                         "desalting, dye-labeled oligonucleotide or peptide",
+                                                         "purification, up to 10 mg",
+                                                         "purification, up to 100 mg"))
+```
+
+### Check the results
+
+```{r}
+maldi %>% dplyr::select(Charge.Name) %>% table() %>% as.data.frame()
+```
+### Prepare the MALDI or HPLC bar chart
+
+```{r,fig.width=5,fig.height=6}
+maldi.bar <- maldi %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "MALDI or HPLC",
+       x = "Sponsor Group",
+       y = "Samples",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+maldi.bar
+```
+### Prepare the MALDI or HPLC pie chart
+
+```{r}
+maldi.pie <- maldi %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "MALDI or HPLC",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+maldi.pie
+```
+
+## Time data
+
+### Extract the data from the main dataframe
+
+```{r}
+time <- msbp.final %>% dplyr::filter(Charge.Name %in% c("Instrument Use Only (per hour) (Polar)",
+  "Instrument Use Only (per hour) (Lipid)",
+  "instrument use only (per hour)",
+  "Agilent 1100 HPLC -Daily",
+  "Agilent 1100 HPLC -Nucleic Acid Dedicated (Agilent 1100 HPLC) | Friday, February 21",
+  "Data Analysis (ID search)",
+  "Data Analysis (PTM analysis; for single protein manual verification)",
+  "Data Analysis (quantitation analysis; TMT; PRM; LFQ; SILAC)",
+  "Data Analysis (small molecules; pk)",
+  "Method Development and Data Analysis Time",
+  "Method Development and Data Analysis Time (Polar)",
+  "Method Development and Data Analysis Time (Porphyrins )",
+  "Method development and data analysis WIBR collaborative rate",
+  "Training: data analysis & Instrument",
+  "Simple Digest",
+  "Additional Simple Digest",
+  "Medium Complex Digest",
+  "Additional Medium Complex Digest",
+  "Complex Digest",
+  "Additional Complex Digest",
+  "Simple Digest- Phosphorylation",
+  "Additional Simple Digest- Phosphorylation",
+  "Medium Complex Digest- Phosphorylation",
+  "Additional Medium Complex Digest- Phosphorylation",
+  "Complex Digest- Phosphorylation",
+  "Additional Complex Digest- Phosphorylation",
+  "TMT6 (IP)",
+  "TMT10 (IP)",
+  "TMT6 (lysate)",
+  "TMT10 (lysate)",
+  "TMT16 (lysate)",
+  "TMT6 (phospho experiment)",
+  "TMT10 (phospho experiment)",
+  "TMT16 (phospho experiment)",
+  "TMT10 (tyrosine experiment)"))
+```
+
+### Subset data for collapse
+
+```{r}
+time.collapse <- time %>% dplyr::filter(Charge.Name %in% c("Data Analysis (ID search)",
+                       "Data Analysis (PTM analysis; for single protein manual verification)",
+                       "Data Analysis (quantitation analysis; TMT; PRM; LFQ; SILAC)",
+                       "Data Analysis (small molecules; pk)","Simple Digest","Additional Simple Digest",
+                       "Medium Complex Digest","Additional Medium Complex Digest","Complex Digest",
+                       "Additional Complex Digest","Simple Digest- Phosphorylation","Additional Simple Digest- Phosphorylation",
+                       "Medium Complex Digest- Phosphorylation","Additional Medium Complex Digest- Phosphorylation",
+                       "Complex Digest- Phosphorylation","Additional Complex Digest- Phosphorylation","TMT6 (IP)",
+                       "TMT10 (IP)","TMT6 (lysate)","TMT10 (lysate)","TMT16 (lysate)","TMT6 (phospho experiment)",
+                       "TMT10 (phospho experiment)","TMT16 (phospho experiment)","TMT10 (tyrosine experiment)"))
+```
+
+#### Collapse to one row per Service.ID and set quantity to 1
+
+```{r}
+time.collapsed <- time.collapse %>%
+  arrange(Service.ID) %>%
+  distinct(Service.ID, .keep_all = TRUE) %>%
+  dplyr::mutate(Quantity = 1)
+```
+
+#### Check the results
+
+```{r}
+dim(time.collapse)
+dim(time.collapsed)
+summary(time.collapse$Quantity)
+summary(time.collapsed$Quantity)
+```
+
+#### Add Quant.To.Present value of 1.5 for each row in time.collapsed
+
+```{r}
+time.collapsed <- time.collapsed %>% dplyr::mutate(Quant.To.Present = 1.5)
+```
+
+#### negate the time.collapsed selection for other adjustments
+
+```{r}
+time.noCollapse <- time %>% dplyr::filter(!Charge.Name %in% c("Data Analysis (ID search)",
+                       "Data Analysis (PTM analysis; for single protein manual verification)",
+                       "Data Analysis (quantitation analysis; TMT; PRM; LFQ; SILAC)",
+                       "Data Analysis (small molecules; pk)","Simple Digest","Additional Simple Digest",
+                       "Medium Complex Digest","Additional Medium Complex Digest","Complex Digest",
+                       "Additional Complex Digest","Simple Digest- Phosphorylation","Additional Simple Digest- Phosphorylation",
+                       "Medium Complex Digest- Phosphorylation","Additional Medium Complex Digest- Phosphorylation",
+                       "Complex Digest- Phosphorylation","Additional Complex Digest- Phosphorylation","TMT6 (IP)",
+                       "TMT10 (IP)","TMT6 (lysate)","TMT10 (lysate)","TMT16 (lysate)","TMT6 (phospho experiment)",
+                       "TMT10 (phospho experiment)","TMT16 (phospho experiment)","TMT10 (tyrosine experiment)"))
+```
+
+#### Adjust the quantity in this set
+
+```{r}
+time.noCollapse <- time.noCollapse%>% dplyr::mutate(
+  Quant.To.Present = dplyr::case_when(
+    Charge.Name == "Agilent 1100 HPLC -Daily" ~ Quantity * 8,
+    TRUE ~ Quantity  # default case
+  )
+)
+```
+
+#### Recombine the data
+
+```{r}
+time <- rbind(time.collapsed,time.noCollapse)
+```
+
+### Prepare the MALDI or HPLC bar chart
+
+```{r,fig.width=5,fig.height=6}
+time.bar <- time %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quant.To.Present), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            vjust = 0.5,
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Time",
+       x = "Sponsor Group",
+       y = "Samples",
+       fill = "Sponsor") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+time.bar
+```
+
+### Prepare the time pie chart
+
+```{r}
+time.pie <- time %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quant.To.Present), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Time",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+maldi.pie
+```
+
+# Plot the pie charts figure
+
+```{r,fig.width=16,fig.height=4}
+synth.pie + prot.pie + lip.met.pie + maldi.pie + time.pie + plot_layout(ncol = 5, guides = "collect")
+
+combo.pie <- synth.pie + prot.pie + lip.met.pie + maldi.pie + time.pie + plot_layout(ncol = 5, guides = "collect")
+ggsave("figures/MSBP_combo.pie.pdf", 
+       plot = combo.pie, 
+       dpi = 150, 
+       width = 16, 
+       height = 4, 
+       units = "in")
+```
+
+# Write annotated output file
+
+```{r}
+write.xlsx(msbp.final,"msbp.final.xlsx")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "msbp_processing_sessionInfo.txt")
+```

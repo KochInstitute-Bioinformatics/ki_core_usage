@@ -1,0 +1,1 @@
+"0","pep.synth <- pep.synth %>% dplyr::mutate(Quant.To.Present = if_else(Charge.Name == ""5 umole synthesis"", 1, Quantity))"

@@ -1,0 +1,20 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxua2kuaWxhYnMuc2ltcGxlIDwtIGtpLmlsYWJzLnNpbXBsZSAlPiVcbiAgbXV0YXRlKFxuICAgIHBhcmVudGhldGljYWwuSW5zdCA9IHN0cl9leHRyYWN0KEN1c3RvbWVyLkxhYiwgXCIoPzw9XFxcXCgpKC4rPykoPz1cXFxcKSlcIiksICAjIEV4dHJhY3QgdGV4dCBpbiAoKVxuICAgIEN1c3RvbWVyLkxhYiA9IHN0cl9yZW1vdmUoQ3VzdG9tZXIuTGFiLCBcIiBcXFxcKFteKV0rXFxcXCkgKD86TGFifEdyb3VwKSRcIikgICMgUmVtb3ZlIFwiICh2YWx1ZSkgTGFiXCIgb3IgXCIgKHZhbHVlKSBHcm91cFwiIGZyb20gZW5kXG4gIClcbmBgYCJ9 -->
+
+```r
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(
+    parenthetical.Inst = str_extract(Customer.Lab, \"(?<=\\()(.+?)(?=\\))\"),  # Extract text in ()
+    Customer.Lab = str_remove(Customer.Lab, \" \\([^)]+\\) (?:Lab|Group)$\")  # Remove \" (value) Lab\" or \" (value) Group\" from end
+  )
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(
+    parenthetical.Inst = str_extract(Customer.Lab, \"(?<=\\()(.+?)(?=\\))\"),  # Extract text in ()
+    Customer.Lab = str_remove(Customer.Lab, \" \\([^)]+\\) (?:Lab|Group)$\")  # Remove \" (value) Lab\" or \" (value) Group\" from end
+  )
+```"

@@ -1,0 +1,22 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaGFuZC5wcm90IDwtIHJlYWQueGxzeChcInByb3RfbWV0YWIuZGZfbWFudWFsZWRpdHMueGxzeFwiKVxuaGFuZC5wcm90IDwtIGhhbmQucHJvdCAlPiUgcmVuYW1lKHByb3QuRmFjLktleS5ub0R1cHMgPSBGYWMuS2V5Lm5vRHVwcylcbmhhbmQucHJvdC5waXZvdGVkIDwtIGhhbmQucHJvdCAlPiVcbiAgZ3JvdXBfYnkocHJvdC5GYWMuS2V5Lm5vRHVwcykgJT4lXG4gIHN1bW1hcmlzZShGYWMuS2V5ID0gcGFzdGUoRmFjLktleSwgY29sbGFwc2UgPSBcIiwgXCIpLCAuZ3JvdXBzID0gXCJkcm9wXCIpICU+JVxuICBzZWxlY3QocHJvdC5GYWMuS2V5Lm5vRHVwcywgRmFjLktleSlcbmBgYCJ9 -->
+
+```r
+hand.prot <- read.xlsx(\"prot_metab.df_manualedits.xlsx\")
+hand.prot <- hand.prot %>% rename(prot.Fac.Key.noDups = Fac.Key.noDups)
+hand.prot.pivoted <- hand.prot %>%
+  group_by(prot.Fac.Key.noDups) %>%
+  summarise(Fac.Key = paste(Fac.Key, collapse = \", \"), .groups = \"drop\") %>%
+  select(prot.Fac.Key.noDups, Fac.Key)
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+hand.prot <- read.xlsx(\"prot_metab.df_manualedits.xlsx\")
+hand.prot <- hand.prot %>% rename(prot.Fac.Key.noDups = Fac.Key.noDups)
+hand.prot.pivoted <- hand.prot %>%
+  group_by(prot.Fac.Key.noDups) %>%
+  summarise(Fac.Key = paste(Fac.Key, collapse = \", \"), .groups = \"drop\") %>%
+  select(prot.Fac.Key.noDups, Fac.Key)
+```"

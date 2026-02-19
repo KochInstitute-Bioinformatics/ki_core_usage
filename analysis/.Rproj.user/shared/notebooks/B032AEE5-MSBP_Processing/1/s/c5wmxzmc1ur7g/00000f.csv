@@ -1,0 +1,3 @@
+"0","ilabs <- read.xlsx(""../data/stock_ilabs.xlsx"")"
+"0","ilabs.msbp <- ilabs %>% dplyr::filter(Core.Name == ""Biopolymers & Proteomics Core"")"
+"0","rm(ilabs)"

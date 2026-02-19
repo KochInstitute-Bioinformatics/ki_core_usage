@@ -1,0 +1,326 @@
+---
+title: "ilabs Data Import and Pre-Processing"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "12/20/2025"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2,
+  fig.width = 6,
+  fig.height = 6,
+  dpi = 300
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+```
+
+# Data Import
+
+# Read in ilabs csv files
+
+The files come in 2 parts because ilabs only allows 3 years worth of export at a time.
+For this reporting, the date range is 1/1/20-10/31/25
+
+Additional exports files can be added as needed
+
+```{r}
+Part1 <- read.csv("../data/01012020_12312022_ALL Cores_Completed.csv")
+Part2 <- read.csv("../data/01012023_10312025_ALL Cores_Completed.csv")
+```
+
+## Join the parts together into a single ilabs R object
+
+```{r}
+ki.ilabs <- rbind(Part1,Part2)
+```
+
+Check the dimensions of the assembled data
+
+```{r}
+cat("Dimensions of imported ilabs data before cleanup:", dim(ki.ilabs), "\n")
+```
+
+# Column Cleaning
+
+## simplify the ilabs.bioinfo dataframe
+
+The imported object has 47 columns, some columns have a single value,
+some are empty. This first step identifies those columns and summarizes
+the results
+
+```{r}
+simple.cols <- map_df(names(ki.ilabs), ~{
+  col <- ki.ilabs[[.]]
+  n_unique <- n_distinct(col[!is.na(col)])
+  
+  tibble(
+    column = .,
+    value = if_else(all(is.na(col)), 
+                    "empty",
+                    if_else(n_unique == 1,
+                           as.character(unique(col[!is.na(col)])[1]),
+                           NA_character_))
+  )
+}) %>%
+  filter(!is.na(value))
+
+kable(simple.cols, format = "simple")
+```
+
+Now that the information is captured, exclude those simple columns,
+reported on above, and create a new simplified dataframe
+
+```{r}
+ki.ilabs.simple <- ki.ilabs %>% dplyr::select(-all_of(simple.cols$column))
+cat("Dimensions of imported ilabs data after exluding low-content columns:", dim(ki.ilabs.simple), "\n")
+```
+
+## Select and Repair date data
+
+This simplified dataframe has several columns that report dates but
+Purchase.Date is the one that captures information about when the
+service was provided. Exclude unnecessary dates and adjust the values to
+so that they are human readable
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Creation.Date,-Completion.Date,-Billing.Date,
+                                                     -Date.file.sent.to.ERP,-Billing.Event.End.Date)
+ki.ilabs.simple <- ki.ilabs.simple %>% mutate(Purchase.Date = parse_date_time(Purchase.Date, orders = "mdy HM"))
+cat("Dimensions of imported ilabs data after exluding extra date columns:", dim(ki.ilabs.simple), "\n")
+```
+
+The year information can now be accessed with code like this:
+
+```{r}
+ki.ilabs.simple %>%
+  mutate(year = year(Purchase.Date)) %>%
+  group_by(year) %>%
+  summarize(total_quant = sum(Quantity))
+```
+
+## email columns
+
+For the purpose of CCSG reporting, email addresses are not needed.
+customer name (Customer.Name) and lab (Customer.Lab) are captured in different columns
+exclude these from the simplified data frame
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-User.Login.Email,-PI.Email,-Financial.Contact.Email)
+cat("Dimensions of imported ilabs data after exluding unecessary email columns:", dim(ki.ilabs.simple), "\n")
+```
+
+## Additional columns to exlude for simplicity
+
+Our reporting here aims to summarize quantities rather than dollars so
+some columns are not necessary also Asset.ID is not needed
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Asset.ID,-Customer.Title,-Payment.Information,-Cost.Object,
+                                                     -Billing.Status,-Invoice.Num,-Charge.ID,-Created.By)
+cat("Dimensions of imported ilabs data after exluding other unnecessary columns:", dim(ki.ilabs.simple), "\n")
+```
+
+## The column No.Charge.Justification are also probably not needed
+
+Most of the very few annotations might still represent work and should still be counted in reporting.
+
+```{r}
+as.data.frame(table(ki.ilabs.simple$No.Charge.Justification))
+```
+a little more detail on these columns
+
+```{r}
+ki.ilabs.simple %>% dplyr::filter(No.Charge.Justification != "") %>% dplyr::select(Core.Name) %>% table()
+ki.ilabs.simple %>% dplyr::filter(No.Charge.Justification != "") %>% dplyr::select(Quantity) %>% table()
+```
+
+Exclude the column
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-No.Charge.Justification)
+cat("Dimensions of imported ilabs data after exluding No.Charge.Justification:", dim(ki.ilabs.simple), "\n")
+```
+
+# Additional Column Checks - this reports the number of unique values in the remaining 20 columns
+
+```{r}
+ki.ilabs.simple %>% summarize(across(everything(), n_distinct)) %>% as.data.frame() %>% t()
+```
+
+## Organization.Name is not helpful, information in captured in Customer.Institute
+
+```{r}
+table(ki.ilabs.simple$Organization.Name)
+ki.ilabs.simple %>% dplyr::filter(Organization.Name == "Princeton Molecular Biology") %>% dplyr::select(Core.Name,Customer.Institute,Organization.Name)
+```
+
+Remove the column
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Organization.Name)
+cat("Dimensions of imported ilabs data after exluding Organization.Name:", dim(ki.ilabs.simple), "\n")
+```
+
+## The data in Core.ID is redundant with Core.Name
+
+Check the relationship
+
+```{r}
+table(ki.ilabs.simple$Core.Name,ki.ilabs.simple$Core.ID)
+```
+
+Exlclude Core.ID
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Core.ID)
+cat("Dimensions of imported ilabs data after exluding Code.ID:", dim(ki.ilabs.simple), "\n")
+```
+
+```{r}
+ki.ilabs.simple %>% summarize(across(everything(), n_distinct)) %>% as.data.frame() %>% t()
+```
+
+All the remaining columns have some potential utility in report generation
+
+
+# Export the ilabs data for use in other scripts
+
+```{r}
+write.xlsx(ki.ilabs.simple,"../data/stock_ilabs.xlsx")
+```
+
+# Prepare Faculty.Key column
+
+```{r}
+ki.ilabs.simple.Customer.Lab <- ki.ilabs.simple %>% dplyr::select(Customer.Lab)
+ki.ilabs.simple.Customer.Lab <- ki.ilabs.simple.Customer.Lab %>% mutate(Customer.Lab.original = Customer.Lab)
+```
+
+## Faculty Data Cleaning
+
+## Repairing Customer.Lab data
+
+This column is important because it will be used to join faculty annotation data (see faculty.groups)
+The raw format of these data is unnecessarily complex.
+
+Identify rows with more than 1 set of parentheses
+
+```{r}
+ki.ilabs.simple.Customer.Lab %>%
+  filter(str_count(Customer.Lab, "\\(") > 1) %>%
+  distinct(Customer.Lab)
+```
+
+Repair the Traverso edge case
+
+```{r}
+ki.ilabs.simple.Customer.Lab <- ki.ilabs.simple.Customer.Lab %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Traverso, (Gio) Carlo Giovanni (Koch) Lab" ~ "Traverso, Gio (Koch) Lab",
+    TRUE ~ Customer.Lab
+  ))
+```
+
+There are a handful of other edge cases that can be fixed with the following
+
+```{r}
+ki.ilabs.simple.Customer.Lab <- ki.ilabs.simple.Customer.Lab %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Agnihotri, Sameer (PITT)Lab" ~ "Agnihotri, Sameer (PITT) Lab",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple.Customer.Lab <- ki.ilabs.simple.Customer.Lab %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Virendar Kaushik (CDoT, Broad Institute)" ~ "Virendar Kaushik (Broad) Lab",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple.Customer.Lab <- ki.ilabs.simple.Customer.Lab %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Garg, Salil (Lab)" ~ "Garg, Salil (Koch) Lab",
+    TRUE ~ Customer.Lab
+  ))
+```
+
+There are a few remaining columns that dont match the pattern but they will not be repaired here.
+
+```{r}
+ki.ilabs.simple.Customer.Lab %>%
+  mutate(Customer.Lab_stripped = str_trim(str_remove(Customer.Lab, "^.*\\)"))) %>%
+  count(Customer.Lab_stripped, sort = TRUE)
+```
+
+## Parse the parentetical data
+
+Clean up the Lab or Group part, store institional info in a new columns
+
+```{r}
+ki.ilabs.simple.Customer.Lab <- ki.ilabs.simple.Customer.Lab %>%
+  mutate(
+    parenthetical.Inst = str_extract(Customer.Lab, "(?<=\\()(.+?)(?=\\))"),  # Extract text in ()
+    Customer.Lab = str_remove(Customer.Lab, " \\([^)]+\\) (?:Lab|Group)$")  # Remove " (value) Lab" or " (value) Group" from end
+  )
+```
+
+# Export customer data
+
+```{r}
+Customer.Lab.data <- ki.ilabs.simple.Customer.Lab %>% dplyr::select(Customer.Lab.original,Customer.Lab)
+```
+
+```{r}
+Customer.Lab.data.distinct <- Customer.Lab.data %>% dplyr::distinct()
+```
+
+## Make some repairs
+
+```{r}
+Customer.Lab.data.distinct <- Customer.Lab.data.distinct %>% mutate(Customer.Lab = ifelse(grepl("Bhatia, Sangeeta", Customer.Lab, ignore.case = FALSE), "Bhatia, Sangeeta N", Customer.Lab))
+Customer.Lab.data.distinct <- Customer.Lab.data.distinct %>% mutate(Customer.Lab = ifelse(grepl("Boehm, Jesse", Customer.Lab, ignore.case = FALSE), "Boehm, Jesse S", Customer.Lab))
+Customer.Lab.data.distinct <- Customer.Lab.data.distinct %>% mutate(Customer.Lab = ifelse(grepl("Hynes, Richard", Customer.Lab, ignore.case = FALSE), "Hynes, Richard O", Customer.Lab))
+Customer.Lab.data.distinct <- Customer.Lab.data.distinct %>% mutate(Customer.Lab = ifelse(grepl("Langer, Robert", Customer.Lab, ignore.case = FALSE), "Langer, Robert S", Customer.Lab))
+Customer.Lab.data.distinct <- Customer.Lab.data.distinct %>% mutate(Customer.Lab = ifelse(grepl("White, Forest", Customer.Lab, ignore.case = FALSE), "White, Forest M", Customer.Lab))
+```
+
+```{r}
+write.xlsx(Customer.Lab.data.distinct,"../data/Customer.Lab.data_ilabs.xlsx")
+```
+
+# write session info for ilabs preprocessing
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "ilabs_preprocessing_sessionInfo.txt")
+```

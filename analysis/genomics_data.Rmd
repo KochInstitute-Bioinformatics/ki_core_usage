@@ -1,0 +1,770 @@
+---
+title: "Genomics - Data Cleaning, Summary, and Visualizations"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "12/16/2025"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2,
+  fig.width = 6,
+  fig.height = 6,
+  dpi = 300
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+```
+
+# Data Import
+
+## Read in faculty annotations
+
+Sarah provided annotations
+
+```{r}
+faculty.groups.toJoin <- read.xlsx("../data/annotatedFaculty.xlsx")
+```
+
+## Read in ilabs csv files
+
+The files come in 2 parts because ilabs only allows 3 years worth of export at a time.
+Additional exports can be added in as needed
+
+```{r}
+Part1 <- read.csv("../data/01012020_12312022_ALL Cores_Completed.csv")
+Part2 <- read.csv("../data/01012023_10312025_ALL Cores_Completed.csv")
+```
+
+### Join the parts together into a single ilabs R object
+
+```{r}
+ki.ilabs <- rbind(Part1,Part2)
+```
+
+### Check the dimensions
+
+```{r}
+dim(ki.ilabs)
+```
+
+## Read in BMC Filemaker data
+
+```{r}
+bmc.ext <- read.xlsx("../data/ExtUsage2025_2510.xlsx")
+```
+
+# Column Cleaning
+
+## simplify the ilabs.bioinfo dataframe
+
+The imported object has 47 columns, some columns have a single value,
+some are empty. This first step identifies those columns and summarizes
+the results
+
+```{r}
+simple.cols <- map_df(names(ki.ilabs), ~{
+  col <- ki.ilabs[[.]]
+  n_unique <- n_distinct(col[!is.na(col)])
+  
+  tibble(
+    column = .,
+    value = if_else(all(is.na(col)), 
+                    "empty",
+                    if_else(n_unique == 1,
+                           as.character(unique(col[!is.na(col)])[1]),
+                           NA_character_))
+  )
+}) %>%
+  filter(!is.na(value))
+
+kable(simple.cols, format = "simple")
+```
+
+Now that the information is captured, exclude those simple columns,
+reported on above, and create a new simplified dataframe
+
+```{r}
+ki.ilabs.simple <- ki.ilabs %>% dplyr::select(-all_of(simple.cols$column))
+dim(ki.ilabs.simple)
+```
+
+## Select and Repair date data
+
+This simplified dataframe has several columns that report dates but
+Purchase.Date is the one that captures information about when the
+service was provided. Exclude unnecessary dates and adjust the values to
+usable information
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Creation.Date,-Completion.Date,-Billing.Date,-Date.file.sent.to.ERP,-Billing.Event.End.Date)
+dim(ki.ilabs.simple)
+```
+
+The imported dates are in a machine-readable format that is not
+valuable. convert to human readable:
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% mutate(Purchase.Date = parse_date_time(Purchase.Date, orders = "mdy HM"))
+```
+
+The year information can now be accessed with code like this:
+
+```{r}
+ki.ilabs.simple %>%
+  mutate(year = year(Purchase.Date)) %>%
+  group_by(year) %>%
+  summarise(total_quant = sum(Quantity))
+```
+
+## email columns
+
+For the purpose of CCSG reporting, email addresses are not needed,
+exclude these from the simplified data frame
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-User.Login.Email,-PI.Email,-Financial.Contact.Email)
+dim(ki.ilabs.simple)
+```
+
+## Additional columns to exlude for simplicity
+
+Our reporting here aims to summarize quantities rather than dollars so
+some columns are not necessary also Asset.ID is not needed
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Asset.ID,-Customer.Title,-Payment.Information,-Cost.Object,
+                                                               -Billing.Status,-Invoice.Num,
+                                                               -Charge.ID,-Created.By)
+dim(ki.ilabs.simple)
+```
+
+Most of the values in the column No.Charge.Justification are empty
+
+```{r}
+as.data.frame(table(ki.ilabs.simple$No.Charge.Justification))
+```
+
+The few annotations that are there are not substantial Quantity and should still be counted in reporting.
+Uncharged work is still work
+
+```{r}
+ki.ilabs.simple %>% dplyr::filter(No.Charge.Justification != "") %>% dplyr::select(Core.Name) %>% table()
+ki.ilabs.simple %>% dplyr::filter(No.Charge.Justification != "") %>% dplyr::select(Quantity) %>% table()
+```
+
+Exclude the column
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-No.Charge.Justification)
+dim(ki.ilabs.simple)
+```
+
+# Additional Column Work
+
+```{r}
+ki.ilabs.simple %>% summarize(across(everything(), n_distinct)) %>% as.data.frame() %>% t()
+```
+
+## Organization.Name is not helpful, information in captured in Customer.Institute
+
+```{r}
+table(ki.ilabs.simple$Organization.Name)
+ki.ilabs.simple %>% dplyr::filter(Organization.Name == "Princeton Molecular Biology") %>% dplyr::select(Core.Name,Customer.Institute,Organization.Name)
+```
+
+Remove the column
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Organization.Name)
+```
+
+Check value counts again
+
+```{r}
+ki.ilabs.simple %>% summarize(across(everything(), n_distinct)) %>% as.data.frame() %>% t()
+```
+
+## Center
+
+```{r}
+# table(ki.ilabs.simple$Center)
+# ki.ilabs.simple %>% dplyr::filter(Organization.Name == "Princeton Molecular Biology") %>% dplyr::select(Core.Name,Customer.Institute,Organization.Name)
+```
+
+# Data Cleaning
+
+## Repairing Customer.Lab data
+
+This column is important because it will be used to join faculty
+annotation data (see faculty.groups)
+
+Identify rows with more than 1 set of parentheses
+
+```{r}
+ki.ilabs.simple %>%
+  filter(str_count(Customer.Lab, "\\(") > 1) %>%
+  distinct(Customer.Lab)
+```
+
+Parse the Customer.Lab data by removing the " Lab" string and extracting
+the correct parenthetical value for one entry, the (Gio) nickname is
+problematic, remove that
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Traverso, (Gio) Carlo Giovanni (Koch) Lab" ~ "Traverso, Gio (Koch) Lab",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Agnihotri, Sameer (PITT)Lab" ~ "Agnihotri, Sameer (PITT) Lab",
+    TRUE ~ Customer.Lab
+  ))
+
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(Customer.Lab = case_when(
+    Customer.Lab == "Virendar Kaushik (CDoT, Broad Institute)" ~ "Virendar Kaushik (Broad) Lab",
+    TRUE ~ Customer.Lab
+  ))
+```
+
+## Parse the parentetical data and clean up the lab name
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>%
+  mutate(
+    temp.Inst = str_extract(Customer.Lab, "(?<=\\()(.+?)(?=\\))"),  # Extract text in ()
+    Customer.Lab = str_remove(Customer.Lab, " \\([^)]+\\) (?:Lab|Group)$")  # Remove " (value) Lab" or " (value) Group" from end
+  )
+```
+
+## Annotate Faculty
+
+Note: Many of these operations are likely to be bioinformatics specific
+but the approaches can be applied elsewhere.
+
+Check the Keys
+
+```{r}
+# Check unique values in ilabs.bioinfo.simple$Customer.Lab
+# unique(ki.ilabs.simple$Customer.Lab)
+
+# Check unique values in faculty.groups$Fac.Key
+# unique(ki.ilabs.simple$Fac.Key)
+
+# See which values match
+# intersect(ki.ilabs.simple$Customer.Lab, faculty.groups$Fac.Key)
+
+# See which don't match
+# setdiff(ki.ilabs.simple$Customer.Lab, faculty.groups$Fac.Key)
+```
+
+there was a mismatched row, get rid of it
+
+```{r}
+ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::filter(!is.na(Customer.Lab))
+```
+
+## Adding SF faculty annotations
+
+Join the faculty annotations
+
+```{r}
+dim(ki.ilabs.simple)
+ki.ilabs.simple.final <- ki.ilabs.simple %>%
+  merge(faculty.groups.toJoin, 
+        by.x = "Customer.Lab", 
+        by.y = "Fac.Key", 
+        all.x = TRUE, 
+        all.y = FALSE)
+dim(ki.ilabs.simple.final)
+```
+
+# Select Genomics core
+
+```{r}
+ki.ilabs.simple.final.genomics <- ki.ilabs.simple.final %>% dplyr::filter(Core.Name == "KI Genomics Core / MIT BioMicro Center")
+dim(ki.ilabs.simple.final.genomics)
+```
+
+# BMC Filemaker Data Repair
+
+## exclude infomatics data from genomics file
+
+```{r}
+bmc.ext.filt <- bmc.ext %>% dplyr::filter(TYPE != "Bioinformatics")
+```
+
+## Repair the date
+
+The imported dates are in a machine-readable format that is not
+valuable. convert to human readable:
+
+```{r}
+bmc.ext.filt$Purchase.Date <- as.Date(bmc.ext.filt$DATE, origin = "1899-12-30")
+```
+
+## remove the old date and other unnecessary columns
+
+```{r}
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::select(-DATE,-CostObj,-TargetObject,-`_ID`,-PROJID)
+```
+
+## Repair the LAB data
+
+### Export LAB as dataframe
+
+```{r}
+Lab.df <- as.data.frame(unique(bmc.ext.filt$LAB))
+write.xlsx(Lab.df,file="bmc_LAB.df.xlsx")
+```
+
+### Export all parsed ilabs Customer.Lab data
+
+```{r}
+Customer.Lab.df <- as.data.frame(unique(ki.ilabs.simple.final$Customer.Lab))
+Customer.Lab.df <- Customer.Lab.df %>% rename(Fac.Key = `unique(ki.ilabs.simple.final$Customer.Lab)`)
+```
+
+### Join existing faculty annotations
+
+```{r}
+Customer.Lab.df <- Customer.Lab.df %>%
+  merge(faculty.groups.toJoin, 
+        by.x = "Fac.Key", 
+        by.y = "Fac.Key", 
+        all.x = TRUE, 
+        all.y = TRUE)
+```
+
+### Export to excel for manual annotation
+
+```{r}
+write.xlsx(Customer.Lab.df,file="ilabs_Customer.Lab.df.xlsx")
+```
+
+### Import and process hand edited data
+
+```{r}
+hand.ilabs <- read.xlsx("ilabs_Customer.Lab_manual_Edits.df.xlsx")
+```
+
+```{r}
+hand.bmc <- read.xlsx("bmc_LAB.df_manualedits.xlsx")
+hand.bmc <- hand.bmc %>% rename(bmc.Fac.Key.noDups = Fac.Key.NoDups)
+hand.bmc <- hand.bmc %>% rename(bmc.LAB = LAB)
+hand.bmc.pivoted <- hand.bmc %>%
+  group_by(bmc.Fac.Key.noDups) %>%
+  summarise(bmc.LAB = paste(bmc.LAB, collapse = ", "), .groups = "drop") %>%
+  select(bmc.Fac.Key.noDups, bmc.LAB)
+```
+
+```{r}
+hand.prot <- read.xlsx("prot_metab.df_manualedits.xlsx")
+hand.prot <- hand.prot %>% rename(prot.Fac.Key.noDups = Fac.Key.noDups)
+hand.prot.pivoted <- hand.prot %>%
+  group_by(prot.Fac.Key.noDups) %>%
+  summarise(Fac.Key = paste(Fac.Key, collapse = ", "), .groups = "drop") %>%
+  select(prot.Fac.Key.noDups, Fac.Key)
+```
+
+```{r}
+hand.ilabs.bmc <- merge(hand.ilabs, hand.bmc.pivoted, 
+                        by.x = "Fac.Key", 
+                        by.y = "bmc.Fac.Key.noDups", 
+                        all = TRUE)
+```
+
+```{r}
+hand.ilabs.bmc.prot <- merge(hand.ilabs.bmc, hand.prot.pivoted, 
+                        by.x = "Fac.Key", 
+                        by.y = "prot.Fac.Key.noDups", 
+                        all = TRUE)
+```
+
+```{r}
+write.xlsx(hand.ilabs.bmc.prot,file="combinedFac.annot.xlsx")
+```
+
+## Rename columns to match ilabs
+
+```{r}
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::rename(Customer.Lab = LAB)
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::rename(Customer.Name = USER)
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::rename(Service.Type = DETAIL)
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::rename(Quantity = NUM)
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::rename(Total.Price = COST)
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::rename(Category = TYPE)
+```
+
+Add missing columns needed to match ilabs data
+
+```{r}
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Service.ID = "FilemakerData")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Customer.Institute = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Customer.Department = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Charge.Name = Service.Type)
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Unit.of.Measure = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Notes = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Price = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Price.Type = "External non-profit")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Center = "MIT-BMC-CORE")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Fac.Group = "MIT_non.sponsor.external")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Core.Name = "KI Genomics Core / MIT BioMicro Center")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Core.ID = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(temp.Inst = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Usage.Type = "")
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::mutate(Customer.Department = "")
+```
+
+Reorder columns to match ilabs
+
+```{r}
+bmc.ext.filt <- bmc.ext.filt %>% dplyr::select(Customer.Lab,Service.ID,Service.Type,Customer.Name,Customer.Department,Customer.Institute,Charge.Name,
+                                               Notes,Unit.of.Measure,Quantity,Price,Total.Price,Price.Type,Purchase.Date,Core.Name,Center,
+                                               Category,Usage.Type,Core.ID,temp.Inst,Fac.Group)
+```
+
+
+# Genomics Data Import and Final Cleaning
+
+## Import Billing Data
+
+combined ilabs/filemaker data exported from the all_cores_dataProcess.Rmd script
+
+```{r}
+genomics <- read.xlsx("Parsed_ki.ilabs.genomics.plusFilemaker.xlsx")
+```
+
+### Reformat Purchase date column
+
+The imported dates are in a machine-readable format that is not valuable. convert to human readable:
+
+```{r}
+genomics$Purchase.Date <- as.Date(genomics$Purchase.Date, origin = "1899-12-30")
+```
+
+The year information can now be accessed with code like this:
+
+```{r}
+genomics %>%
+  mutate(year = year(Purchase.Date)) %>%
+  group_by(year) %>%
+  summarise(total_price = sum(Total.Price, na.rm = TRUE))
+```
+
+After initial processing, some HTS and Computing lines remain - this code removes them
+
+## Remove HTS rows
+
+These rows have Category values that start with HTS
+
+```{r}
+cat("genomics dimensions before HTS category exclusion:", dim(genomics), "\n")
+genomics <- genomics %>% dplyr::filter(!grepl("^HTS", Category))
+cat("genomics dimensions after HTS category exclusion:", dim(genomics), "\n")
+```
+
+and Service.Type values that equal the strings below:
+
+```{r}
+cat("genomics dimensions before HTS Service.Type exclusion:", dim(genomics), "\n")
+genomics <- genomics %>% dplyr::filter(!grepl("HTS Charge|Cell Line Expansion/Banking Request|Cell Line Repository Request|
+                                              Mycoplasma Testing - all in|Mycoplasma Testing Request|
+                                              HTS Charge|HTS Collaborative Project|HTS Consumables Request|
+                                              HTS: Consultation & Project Management|HTS: Consultation and Technical Assistance", Service.Type))
+cat("genomics dimensions after HTS Service.Type exclude:", dim(genomics), "\n")
+```
+
+## Remove Computing rows
+
+```{r}
+cat("genomics dimensions before Compute Service.Type exclusion:", dim(genomics), "\n")
+genomics <- genomics %>% dplyr::filter(!grepl("Computing", Category))
+genomics <- genomics %>% dplyr::filter(!grepl("BMC-PUB Archive Storage|BMC-PUB Data Storage", Service.Type))
+cat("genomics dimensions after Compute Service.Type exclusion:", dim(genomics), "\n")
+```
+
+## Remove total price $0 rows
+
+```{r}
+cat("genomics dimensions before Total.Price <= 0 exclusion:", dim(genomics), "\n")
+genomics <- genomics %>% dplyr::filter(Total.Price > 0)
+cat("genomics dimensions after Total.Price <= 0 exclusion:", dim(genomics), "\n")
+```
+
+## Retired Fees
+
+There are 2 rows of Retired fees that are unclear, they will not be removed at this time but can be with the commented commands below
+
+```{r}
+genomics %>% dplyr::filter(Category=="Retired Fees") %>% 
+  dplyr::select(Customer.Lab,Service.Type,Unit.of.Measure,Price,Purchase.Date)
+```
+
+```{r}
+# cat("genomics dimensions abefore Compute Service.Type exclusion:", dim(genomics), "\n")
+# genomics <- genomics %>% dplyr::filter(Category != "Retired Fees")
+# cat("genomics dimensions abefore Compute Service.Type exclusion:", dim(genomics), "\n")
+```
+
+# Examination of genomics dataframe
+
+Summarize the number of unique values per column. Based on these results, 3 columns were identified that can be used to annotate the dataframe.
+These are (in order of complexity):
+
+1) Charge.Name - 1014 values
+2) Service.Type - 169 values
+3) Category - 24 values
+
+The values from these columns were exported for manual annotation
+
+```{r, out.width="100%"}
+unique_counts <- sapply(genomics, function(x) length(unique(x)))
+
+data.frame(
+  Column = names(unique_counts),
+  Unique_Values = as.numeric(unique_counts),
+  row.names = NULL
+) %>%
+  arrange(desc(Unique_Values)) %>%
+  knitr::kable()
+```
+
+## Write clean genomics data
+
+```{r}
+write.xlsx(genomics,file="genomics_toAnnotate.xlsx")
+```
+
+# Summary Categories annotation file
+
+These data contain summary categories and groupings provided by SF and SL. The key column will be used to join data to genomics billing data.
+
+```{r}
+summary_categories <- read.xlsx("../data/IGT_Capabilities_SummaryCategories.xlsx")
+```
+
+It is essential that the key column is unique, this code returns TRUE if all unique, FALSE if duplicates exist
+
+```{r}
+length(unique(summary_categories$key)) == nrow(summary_categories)
+```
+
+# Annotation of genomics rows
+
+Each row in the genomics dataframe has to annotated with the key from summary_categories.
+There are several ways to accomplish this.
+
+1) Join key using data in the genomics$Category column
+2) Join key using data in the genomics$Service.Type column
+3) Conditional assignment using data in genomics$Charge.Name column
+
+## Category Annotations
+
+There are a small number of values in this column but too many instances where multiple keys are in the same category.
+That said, it is a good first pass annotation
+
+```{r}
+category_annotations <- read.xlsx("../data/IGT_Capabilities_CategoryAnnotations.xlsx")
+```
+
+Ensure that all values in the category_annotations$key column are present in summary_categories$key
+
+```{r}
+all(category_annotations$key %in% summary_categories$key)
+```
+
+### Check empty values in cleaned genomics dataframe
+
+None of these rows are empty in Service.Type so they will not be repaired here
+
+```{r, out.width="100%"}
+genomics %>% dplyr::filter(Category == "") %>%
+  dplyr::select(Service.ID,Category,Service.Type,Charge.Name) %>% 
+  knitr::kable()
+```
+
+## Join Category Annotations to genomics
+
+```{r}
+cat("genomics dimensions before Category Annotation Join:", dim(genomics), "\n")
+genomics <- genomics %>% left_join(category_annotations %>% select(-Frequency), by = "Category")
+cat("genomics dimensions after Category Annotation Join:", dim(genomics), "\n")
+```
+
+### Check success
+
+This first pass attaches keys to the data for most rows but the results are not granular enough
+
+```{r}
+table(genomics$key)
+cat("The number of different keys attached:", length(unique(genomics$key)), "\n")
+```
+
+## Service.Type annotations are not likely to help
+
+```{r}
+# servtype <- read.xlsx("../data/IGT_Capabilities_dataframe_SLedits.xlsx", sheet="SERVTYPE")
+```
+
+# Conditional Annotations
+
+## Create a new key column that will be updated with conditional statements
+
+use blank as a dummy value to start
+
+```{r}
+genomics <- genomics %>% mutate(key.manual = "blank")
+```
+
+## Conditional update commands
+
+```{r}
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("PacBio", Charge.Name, ignore.case = FALSE), "pacbio", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("MiSeq", Charge.Name, ignore.case = FALSE), "miseq", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("HiSeq", Charge.Name, ignore.case = FALSE), "hiseq", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("NextSeq", Charge.Name, ignore.case = FALSE), "nextseq", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("NovaSeq", Charge.Name, ignore.case = FALSE), "novaseq", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("ILL-Nova", Charge.Name, ignore.case = FALSE), "novax", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Element", Charge.Name, ignore.case = FALSE), "element", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Singular", Charge.Name, ignore.case = FALSE), "singular", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Visium", Charge.Name, ignore.case = FALSE), "cytassist", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Covaris", Charge.Name, ignore.case = FALSE), "covaris", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Fragment Analyzer", Charge.Name, ignore.case = FALSE), "frag_anal", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Femto", Charge.Name, ignore.case = FALSE), "femto", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("HTL", Charge.Name, ignore.case = FALSE), "frag_anal", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("LC480 qPCR", Charge.Name, ignore.case = FALSE), "qpcr", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Light Cycler 480", Charge.Name, ignore.case = FALSE), "qpcr", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("qPCR only", Charge.Name, ignore.case = FALSE), "qpcr", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("NEB Ultra II RNAseq", Charge.Name, ignore.case = FALSE), "standard_prep", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("NEB Ultra II RNAseq", Charge.Name, ignore.case = FALSE), "standard_prep", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Mosquito", Charge.Name, ignore.case = FALSE), "tecan", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Tecan Freedom EVO150", Charge.Name, ignore.case = FALSE), "tecan", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("BioA", Charge.Name, ignore.case = FALSE), "bioanalyzer", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Reagent: SYBR Green", Charge.Name, ignore.case = FALSE), "consum", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Plates, 96-well", Charge.Name, ignore.case = FALSE), "consum", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Plates, 384-well", Charge.Name, ignore.case = FALSE), "consum", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(grepl("Oligo Instrument", Charge.Name, ignore.case = FALSE), "oligo", key.manual))
+```
+
+### 10x complexity
+
+```{r}
+chromium_values <- c(
+  "10X - Amplicon - Setup",
+  "10X - Amplicon - Per Sample",
+  "10X - Digital Gene Expression - Per Sample",
+  "10X - Digital Gene Expression - Setup",
+  "10X - Multiome - Per Sample",
+  "10X - Multiome - Setup",
+  "10X - scATACseq - Per Sample",
+  "10X - scATACseq - Setup",
+  "10X - scCNV - Per Sample",
+  "10X - scCNV - Setup",
+  "10x 1000120",
+  "10x 1000121",
+  "10x 1000127",
+  "10x 1000215",
+  "10x 1000215 (1/2)",
+  "10x 1000268",
+  "10x 3' 16 rxn kit",
+  "10x 3' FB kit",
+  "10x 3' Kit 16 rxns",
+  "10X Chip \"B\"",
+  "10X chip \"D\"",
+  "10x Chip G 16 rxns",
+  "10x Genomics PN 1000161",
+  "10x Genomics PN 1000212",
+  "10x Genomics PN 1000268",
+  "10x Genomics PN 1000390",
+  "10x Index plates",
+  "10X Library Prepration",
+  "10x NextGEM 3' (1000268) 16 RXN",
+  "10x NextGEM chip G 16 rxn",
+  "10x NG3' 16 rxn kit",
+  "10x Quote SQ3199627V1",
+  "10x Reqs: 1066486, 1069775",
+  "RGT - 10X-ATAC",
+  "RGT - 10X-chipB",
+  "RGT - 10X-chipD",
+  "RGT - 10X-chipE",
+  "RGT - 10X-chipG",
+  "RGT - 10X-DGE",
+  "RGT - 10X-DGE x16",
+  "RGT - 10X-IndexPlate",
+  "SC - 10x Amp sample",
+  "SC - 10x Amp setup",
+  "SC - 10x ATAC sample",
+  "SC - 10x ATAC setup",
+  "SC - 10x Cancel",
+  "SC - 10x DGE sample",
+  "SC - 10x DGE setup",
+  "SC - 10X multi sample",
+  "SC - 10X multi setup"
+)
+
+chromium_reagent_values  <- c(
+  "10X ATACseq reagents",
+  "10X DGE reagents (per sample)",
+  "Reagent: 10X Chromium Chip (per Chip) - BMC instrument",
+  "Reagent: 10XDGE kit (per sample)",
+  "1000798 GEM-X Flex GEX Mouse 16-plex, 64 samples",
+  "1000798 GEM-X Flex GEX Mouse 16-plex, 64 samples",
+  "1000791 GEM-X Flex GEX Chip Kit, 4 Chips",
+  "1000781 GEM-X Flex Sample Preparation v2 kit"
+)
+
+chromium_cancelled_values <- c(
+  "10X - Cancelled Run"
+)
+
+genomics <- genomics %>% mutate(key.manual = ifelse(Charge.Name %in% chromium_values, "chromium", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(Charge.Name %in% chromium_reagent_values, "consum", key.manual))
+genomics <- genomics %>% mutate(key.manual = ifelse(Charge.Name %in% chromium_cancelled_values, "cancelled", key.manual))
+```
+
+# Write partially annotated output file
+
+```{r}
+write.xlsx(genomics,file="genomics_partiallyAnnotated.xlsx")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "genomics_data_sessionInfo.txt")
+```
