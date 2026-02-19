@@ -23,11 +23,18 @@ Core-specific external usage data not captured in ilabs
 -[Metabolite Profiling external - 2024 - MSBP](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/METPRO_2024_Core%20Charges%20by%20Service.xlsx)
 -[Metabolite Profiling external - 2025 - MSBP](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/METPRO2025_Core%20Charges%20by%20Service.xlsx)
 
-Lookup table between Faculty/Lab notations in the input data files and a harmonized Faculty.Key
+Lookup table between Faculty/Lab notations in the raw input data files and a harmonized Faculty.Key
+```{text}
+NOTE: This table contains Faculty/Lab notations from the 1/1/00-10/31/25 ilabs data, metpro external and bmc external data. If new ilabs or external data are added, we must check for new Faculty/Lab notations and annotate any new ones to a key in the format "Last, First". Each individual should have only one key and that key should exactly match the key in sponsor annotation table.
+```
 
 - [Faculty Key table](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/FacultyKeys.xlsx)
 
-Lookup table between Faculty Keys and core-specific sponsor relationships
+Lookup table between Faculty Keys, faculty annotations such as KI affiliation and program, and core-specific sponsor relationships
+```{text}
+NOTE: Different cores can have different sponsorship relationships with faculty members. 
+IGT and DSMI are identical so these are combined. MSB has 2 sub-cores (metpro and biopolymers) so this core has 2 columns.
+```
 
 - [Sponsorship Table](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/annotated.Faculty.Keys_tmp.xlsx)
 
@@ -35,7 +42,7 @@ Simplified Sponsor relationships for plotting
 
 - [Simple Sponsors](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/sponsor.Keys.ForPlotting.xlsx)
 
-## Clean and assembly raw ilabs data
+## Clean and assemble raw ilabs data
 
 Exported ilabs reports have a max of 3 years so to cover CCSG reporting period, 2 files are assembled. These files also have extra columns that are not used in reporting. This script and html report assembles and cleans these data and outputs a stock ilabs file used in each core script.
 
