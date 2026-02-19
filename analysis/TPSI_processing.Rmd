@@ -1,0 +1,263 @@
+---
+title: "TPSI - Data Cleaning, Summary, and Visualizations"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "2/19/2026"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+```
+
+# Data Import
+
+## Read in ilabs stock data and select Biopolymers rows
+
+```{r}
+ilabs <- read.xlsx("../data/stock_ilabs.xlsx")
+ilabs.tpsi <- ilabs %>% dplyr::filter(Core.Name %in% c("Microscopy Facility","Histology Core Facility"))
+rm(ilabs)
+```
+
+### Repair ilabs date
+
+```{r}
+ilabs.tpsi$Purchase.Date <- as.Date(ilabs.tpsi$Purchase.Date, origin = "1899-12-30")
+```
+
+### Check dates before range selection
+
+```{r, fig.width=12,fig.height=5}
+ilabs.tpsi %>%
+  mutate(Year_Month = floor_date(Purchase.Date, "month")) %>%
+  count(Year_Month) %>%
+  arrange(Year_Month) %>%
+  ggplot(aes(x = Year_Month, y = n)) +
+  geom_col(fill = "steelblue") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  labs(title = "Records by Month",
+       x = "Month",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Select reporting date range
+
+```{r}
+cat("Dimensions of ilabs.tpsi before reporting range selection:", dim(ilabs.tpsi), "\n")
+ilabs.tpsi <- ilabs.tpsi %>% dplyr::filter(between(Purchase.Date, as.Date("2020-05-01"), as.Date("2025-10-31")))
+cat("Dimensions of ilabs.tpsi after reporting range selection:", dim(ilabs.tpsi), "\n")
+```
+
+### Check dates after reporting range selection
+
+```{r, fig.width=12,fig.height=5}
+ilabs.tpsi %>%
+  mutate(Year_Month = floor_date(Purchase.Date, "month")) %>%
+  count(Year_Month) %>%
+  arrange(Year_Month) %>%
+  ggplot(aes(x = Year_Month, y = n)) +
+  geom_col(fill = "steelblue") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  labs(title = "Records by Month",
+       x = "Month",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+# Faculty Annotation Work
+
+### Import faculty key data
+
+```{r}
+fac.key <- read.xlsx("../data/FacultyKeys.xlsx")
+```
+
+### Associate Faculty.Key with ilabs.tpsi
+
+```{r}
+ilabs.tpsi <- ilabs.tpsi %>%
+  left_join(fac.key %>%
+              select(ValueInData, Faculty.Key) %>%
+              distinct(), 
+            by = c("Customer.Lab" = "ValueInData"))
+```
+
+### Import sponsor annotation data
+
+```{r}
+fac.annot <- read.xlsx("../data/annotated.Faculty.Keys_tmp.xlsx")
+```
+
+### Join to ilabs.tpsi using Faculty.Key
+
+```{r}
+ilabs.tpsi <- ilabs.tpsi %>%
+  dplyr::left_join(
+    fac.annot %>% dplyr::select(Faculty.Key, IGT_DSMI_Sponsor),
+    by = "Faculty.Key"
+  )
+```
+
+### Simplify sponsor associations for plotting
+
+#### Import simplified categories
+
+```{r}
+sponsor.toPlot <- read.xlsx("../data/sponsor.Keys.ForPlotting.xlsx")
+sponsor.toPlot
+```
+
+#### Join simplified sponsor data to ilabs.tpsi
+
+```{r}
+ilabs.tpsi <- ilabs.tpsi %>%
+  dplyr::left_join(sponsor.toPlot, by = c("IGT_DSMI_Sponsor" = "Sponsor"))
+```
+
+# Service Annotation
+
+This may be necessary to facilitate data type selections for plotting
+
+## Gather categrories and output data
+
+Information about what was done is stored in 2 columns: Service.Type and Charge.Name
+
+```{r}
+# ilabs.tpsi <- ilabs.tpsi %>%
+#   mutate(Service.Group.working = case_when(
+#     Core.Name == "Biopolymers & Proteomics Core" ~ Service.Type,
+#     Core.Name == "metpro" ~ Charge.Name,
+#     TRUE ~ NA_character_  # default for any other cases
+#   ))
+# 
+# cat("Dimensions of Service.Group.working dataframe:", dim(as.data.frame(table(ilabs.tpsi$Service.Group.working))), "\n")
+# 
+# msbp.Service.Group.working.df <- as.data.frame(table(ilabs.tpsi$Service.Group.working))
+# write.xlsx(msbp.Service.Group.working.df,file="msbp.Service.Group.working.df.xlsx")
+```
+
+## Import manually annotated service groups
+
+Manually annotate Service.Group based on data in Service.Group.working and import the results
+
+```{r}
+# msbp.Service.Groups <- read.xlsx("../data/msbp.Service.Group.Annotation.xlsx")
+```
+
+## Join Service.Group to ilabs.tpsi
+
+```{r}
+# ilabs.tpsi <- ilabs.tpsi %>%
+#   dplyr::left_join(
+#     msbp.Service.Groups %>% dplyr::select(Service.Group.working, Service.Group),
+#     by = "Service.Group.working"
+#   )
+```
+
+# Rate Modifiers
+
+This is being paused now - using consistent units (each and hours instead)
+
+## Import rate modifier data
+
+```{r}
+# rate.mod <- read.xlsx("../data/rateModifiers.xlsx")
+# rate.mod
+```
+
+## Join the 2 different rate modifiers to ilabs.tpsi using SponsorCategory
+
+This should be validated by looking for Customer.Lab values that have more than 1 rate.modifier
+
+```{r}
+# msbp.final <- msbp.final %>%
+#   left_join(
+#     rate.mod %>% select(SponsorCategory, BP_modifier),
+#     by = c("BioPol_Sponsor" = "SponsorCategory")
+#   ) %>%
+#   left_join(
+#     rate.mod %>% select(SponsorCategory, metpro_modifier),
+#     by = c("MetPro_Sponsor" = "SponsorCategory")
+#   ) %>%
+#   mutate(rate.modifier = case_when(
+#     Core.Name == "Biopolymers & Proteomics Core" ~ BP_modifier,
+#     Core.Name == "metpro" ~ metpro_modifier,
+#     TRUE ~ NA_real_
+#   )) %>%
+#   select(-BP_modifier, -metpro_modifier)  # clean up temporary columns
+```
+
+## Create adjusted Total.Price values based on assigned rate.modifier values
+
+```{r}
+# msbp.final <- msbp.final %>% dplyr::mutate(Adjusted.Total.Price = Total.Price * rate.modifier)
+```
+
+# Data Visualizations
+
+## Define Colors
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "steelblue",
+  "MIT_Sponsor" = "lightpink",
+  "Non_Sponsor" = "orange"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+## Pie Charts
+
+Here we need to define what wants to be plotted, and how to select the data.
+
+# Write annotated output file
+
+```{r}
+write.xlsx(ilabs.tpsi,"ilabs.tpsi.xlsx")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "TPSI_processing_sessionInfo.txt")
+```
