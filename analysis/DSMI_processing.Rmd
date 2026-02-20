@@ -229,7 +229,7 @@ dsmi.final <- dsmi.final %>%
 ### Import sponsor annotation data
 
 ```{r}
-fac.annot <- read.xlsx("../data/annotated.Faculty.Keys_tmp.xlsx")
+fac.annot <- read.xlsx("../data/annotated.Faculty.Keys.xlsx")
 ```
 
 ### Join to dsmi.final using Faculty.Key
@@ -398,7 +398,7 @@ train.bar <- train %>%
   scale_fill_manual(values = sponsor_colors) +
   labs(title = "Training",
        x = "Sponsor Group",
-       y = "Sessions",
+       y = "Sessions Attended",
        fill = "Sponsor") +
   theme_minimal() +
   theme(legend.position = "right",
@@ -432,7 +432,7 @@ train.pie <- train %>%
             color = "white") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Training",
+  labs(title = "Training Sessions Attended",
        fill = "Sponsor") +
   theme_void() +
   theme(legend.position = "right")
@@ -627,7 +627,7 @@ proj.hours.pie <- hours.project %>%
   theme_void() +
   theme(legend.position = "right")
 
-hours.pie
+proj.hours.pie
 ```
 
 ### Prepare DMAC Hours bar chart

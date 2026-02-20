@@ -119,18 +119,30 @@ ilabs.tpsi <- ilabs.tpsi %>%
 ### Import sponsor annotation data
 
 ```{r}
-fac.annot <- read.xlsx("../data/annotated.Faculty.Keys_tmp.xlsx")
+fac.annot <- read.xlsx("../data/annotated.Faculty.Keys.xlsx")
 ```
 
-### Join to ilabs.tpsi using Faculty.Key
+### Join sponsorship to ilabs.tpsi using Faculty.Key
 
 ```{r}
 ilabs.tpsi <- ilabs.tpsi %>%
   dplyr::left_join(
-    fac.annot %>% dplyr::select(Faculty.Key, IGT_DSMI_Sponsor),
+    fac.annot %>% dplyr::select(Faculty.Key, Microscopy_Sponsor, Histology_Sponsor),
     by = "Faculty.Key"
   )
 ```
+
+### Create an aggregated sponsor category for plotting
+
+```{r}
+ilabs.tpsi <- ilabs.tpsi %>%
+  dplyr::mutate(Sponsor = case_when(
+    Core.Name == "Histology Core Facility" ~ Histology_Sponsor,
+    Core.Name == "Microscopy Facility" ~ Microscopy_Sponsor,
+    TRUE ~ NA_character_
+  ))
+```
+
 
 ### Simplify sponsor associations for plotting
 
@@ -145,7 +157,7 @@ sponsor.toPlot
 
 ```{r}
 ilabs.tpsi <- ilabs.tpsi %>%
-  dplyr::left_join(sponsor.toPlot, by = c("IGT_DSMI_Sponsor" = "Sponsor"))
+  dplyr::left_join(sponsor.toPlot, by = c("Sponsor" = "Sponsor"))
 ```
 
 # Service Annotation
@@ -250,7 +262,7 @@ Here we need to define what wants to be plotted, and how to select the data.
 # Write annotated output file
 
 ```{r}
-write.xlsx(ilabs.tpsi,"ilabs.tpsi.xlsx")
+write.xlsx(ilabs.tpsi,"tpsi.final.xlsx")
 ```
 
 # write session info

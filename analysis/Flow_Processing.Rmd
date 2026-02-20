@@ -176,7 +176,7 @@ ilabs.flow <- ilabs.flow %>%
 NOTE: Once flow sponsor groups are finalized, remove the tmp designation
 
 ```{r}
-fac.annot <- read.xlsx("../data/annotated.Faculty.Keys_tmp.xlsx")
+fac.annot <- read.xlsx("../data/annotated.Faculty.Keys.xlsx")
 ```
 
 ### Join to ilabs.flow using Faculty.Key

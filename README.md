@@ -40,7 +40,7 @@ Lookup table between Faculty Keys, faculty annotations such as KI affiliation an
 NOTE: Different cores can have different sponsorship relationships with faculty members. 
 IGT and DSMI are identical so these are combined. MSB has 2 sub-cores (metpro and biopolymers) so this core has 2 columns.
 
-- [Sponsorship Table](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/annotated.Faculty.Keys_tmp.xlsx)
+- [Sponsorship Table](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/annotated.Faculty.Keys.xlsx)
 
 Simplified Sponsor relationships for plotting
 
