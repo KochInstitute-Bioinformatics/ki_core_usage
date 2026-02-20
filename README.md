@@ -120,7 +120,7 @@ For each core, there are 4 steps in the processing:
 
 ### NanoFIB
 
-- [script]()
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/NanoFIB_Processing.Rmd)
 - [report]()
-- [data_file]()
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/nano.final.xlsx)
 - [figure]()

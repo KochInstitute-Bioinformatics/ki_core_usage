@@ -26,3 +26,6 @@ data/ExtUsage2025_2510.xlsx
 data/METPRO_2024_Core Charges by Service.xlsx
 data/METPRO2025_Core Charges by Service.xlsx
 .Rproj.user
+
+# Ignore processed data files
+analysis/*.final.xlsx
