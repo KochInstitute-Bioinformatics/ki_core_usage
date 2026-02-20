@@ -24,8 +24,11 @@ Core-specific external usage data not captured in ilabs
 -[Metabolite Profiling external - 2025 - MSBP](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/METPRO2025_Core%20Charges%20by%20Service.xlsx)
 
 Lookup table between Faculty/Lab notations in the raw input data files and a harmonized Faculty.Key
+
 ```{text}
-NOTE: This table contains Faculty/Lab notations from the 1/1/00-10/31/25 ilabs data, metpro external and bmc external data. If new ilabs or external data are added, we must check for new Faculty/Lab notations and annotate any new ones to a key in the format "Last, First". Each individual should have only one key and that key should exactly match the key in sponsor annotation table.
+NOTE: This table contains Faculty/Lab notations from the 1/1/00-10/31/25 ilabs data, metpro external and bmc external data. 
+If new ilabs or external data are added, we must check for new Faculty/Lab notations and annotate any new ones to a key in the format "Last, First". 
+Each individual should have only one key and that key should exactly match the key in sponsor annotation table.
 ```
 
 - [Faculty Key table](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/FacultyKeys.xlsx)
@@ -52,19 +55,66 @@ Exported ilabs reports have a max of 3 years so to cover CCSG reporting period, 
 
 ## Assemble and Process data for each core
 
+For each core, there are 4 steps in the processing:
+
+1 - Preparation of a script that extracts data from the stock ilabs file, and applicable, adds external data.
+    The script annotates the data with sponsorship information and prepares visualizations
+2 - Preparation of html report from script
+3 - Export final data file in excel format
+4 - Prepare the pie chart panel for the CCSG application. This figure may need adjustments in illustrator.
+
 ### FLOW
+
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/Flow_Processing.Rmd)
+- [report](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/Flow_Processing.html)
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/flow.final.xlsx)
+- [figure](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/figures/Flow_combo.pie.pdf)
 
 ### MSBP
 
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/MSBP_Processing.Rmd)
+- [report](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/MSBP_Processing.html)
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/msbp.final.xlsx)
+- [figure](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/figures/MSBP_combo.pie.pdf)
+
 ### DSMI
+
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/DSMI_processing.Rmd)
+- [report](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/DSMI_processing.html)
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/dsmi.final.xlsx)
+- [figure](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/figures/DSMI_combo.pie.pdf)
 
 ### TPSI
 
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/TPSI_processing.Rmd)
+- [report]()
+- [data_file]()
+- [figure]()
+
 ### IGT
+
+- [script]()
+- [report]()
+- [data_file]()
+- [figure]()
 
 ### PMIT
 
-### DSMI
+- [script]()
+- [report]()
+- [data_file]()
+- [figure]()
+
+### HTS
+
+- [script]()
+- [report]()
+- [data_file]()
+- [figure]()
 
 ### NanoFIB
 
+- [script]()
+- [report]()
+- [data_file]()
+- [figure]()
