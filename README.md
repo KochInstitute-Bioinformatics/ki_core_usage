@@ -57,11 +57,14 @@ Exported ilabs reports have a max of 3 years so to cover CCSG reporting period, 
 
 For each core, there are 4 steps in the processing:
 
-1 - Preparation of a script that extracts data from the stock ilabs file, and applicable, adds external data.
-    The script annotates the data with sponsorship information and prepares visualizations
-2 - Preparation of html report from script
-3 - Export final data file in excel format
-4 - Prepare the pie chart panel for the CCSG application. This figure may need adjustments in illustrator.
+1. Preparation of a script that extracts data from the stock ilabs file, and applicable, adds external data.
+     The script annotates the data with sponsorship information and prepares visualizations
+
+2. Preparation of html report from script
+
+3. Export final data file in excel format
+
+4. Prepare the pie chart panel for the CCSG application. This figure may need adjustments in illustrator.
 
 ### FLOW
 
