@@ -94,28 +94,28 @@ For each core, there are 4 steps in the processing:
 
 - [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/TPSI_processing.Rmd)
 - [report]()
-- [data_file]()
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/tpsi.final.xlsx)
 - [figure]()
 
 ### IGT
 
-- [script]()
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/IGT_Processing.Rmd)
 - [report]()
-- [data_file]()
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/igt.final.xlsx)
 - [figure]()
 
 ### PMIT
 
-- [script]()
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/PMIT_Processing.Rmd)
 - [report]()
-- [data_file]()
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/pmit.final.xlsx)
 - [figure]()
 
 ### HTS
 
-- [script]()
+- [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/HTS_Processing.Rmd)
 - [report]()
-- [data_file]()
+- [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/hts.final.xlsx)
 - [figure]()
 
 ### NanoFIB
