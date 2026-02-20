@@ -28,19 +28,17 @@ Core-specific external usage data not captured in ilabs
 
 Lookup table between Faculty/Lab notations in the raw input data files and a harmonized Faculty.Key
 
-```{text}
 NOTE: This table contains Faculty/Lab notations from the 1/1/00-10/31/25 ilabs data, metpro external and bmc external data. 
-If new ilabs or external data are added, we must check for new Faculty/Lab notations and annotate any new ones to a key in the format "Last, First". 
-Each individual should have only one key and that key should exactly match the key in sponsor annotation table.
-```
+If new ilabs or external data are added, we must check for new Faculty/Lab notations and annotate any new ones to a key 
+in the format "Last, First". Each individual should have only one key and that key should exactly match the key in 
+sponsor annotation table.
 
 - [Faculty Key table](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/FacultyKeys.xlsx)
 
 Lookup table between Faculty Keys, faculty annotations such as KI affiliation and program, and core-specific sponsor relationships
-```{text}
+
 NOTE: Different cores can have different sponsorship relationships with faculty members. 
 IGT and DSMI are identical so these are combined. MSB has 2 sub-cores (metpro and biopolymers) so this core has 2 columns.
-```
 
 - [Sponsorship Table](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/data/annotated.Faculty.Keys_tmp.xlsx)
 
