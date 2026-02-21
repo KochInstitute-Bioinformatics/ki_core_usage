@@ -38,6 +38,7 @@ library(ggpubr)
 library(purrr)
 library(knitr)
 library(lubridate)
+library(patchwork)
 ```
 
 # Data Import
@@ -257,7 +258,211 @@ sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 
 ## Pie Charts
 
-Here we need to define what wants to be plotted, and how to select the data.
+### Pathology Consult
+
+```{r}
+ilabs.tpsi %>% dplyr::filter(str_detect(Usage.Type, "Consult")) %>% dplyr::select(Usage.Type) %>% table()
+ilabs.tpsi %>% dplyr::filter(Usage.Type == "N/A" & Unit.of.Measure == "hour") %>% dplyr::select(Usage.Type) %>% table()
+pc.1 <- ilabs.tpsi %>% dplyr::filter(str_detect(Usage.Type, "Consult"))
+pc.2 <- ilabs.tpsi %>% dplyr::filter(Usage.Type == "N/A" & Unit.of.Measure == "hour")
+path <- rbind(pc.1,pc.2)
+dim(path)
+```
+
+### Prepare Pathology Consult pie chart
+
+```{r}
+path.pie <- path %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Pathology Consultation Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+path.pie
+```
+
+### Instrument Use: Assisted and Training
+
+```{r}
+instr <- ilabs.tpsi %>% dplyr::filter(Usage.Type %in% c("Assisted", 
+                                                        "Assisted Imaging- Visium", 
+                                                        "Assisted Use", 
+                                                        "New User Training", 
+                                                        "New User Training (remote)", 
+                                                        "Training", 
+                                                        "Unattended scan time"))
+```
+
+#### Check the data
+
+```{r}
+table(instr$Usage.Type)
+```
+
+### Prepare Instrument Use: Assisted and Training pie chart
+
+```{r}
+instr.pie <- instr %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Instrument Use: Assisted and Training Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+instr.pie
+```
+
+### Instrument Use: Trained
+
+```{r}
+inst.train <- ilabs.tpsi %>% dplyr::filter(Usage.Type %in% c("Beginner User", 
+                                                             "Beginner Users", 
+                                                             "Independent Use", 
+                                                             "Independent Use: off-peak time", 
+                                                             "Independent Use: peak time", 
+                                                             "Independent User: off-peak time", 
+                                                             "Independent User: peak time", "Super User"))
+```
+
+#### Check the data
+
+```{r}
+table(inst.train$Usage.Type)
+```
+
+### Prepare Instrument Use: Assisted and Training pie chart
+
+```{r}
+inst.train.pie <- inst.train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Instrument Use: Trained Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+inst.train.pie
+```
+
+### Tissue Processing
+
+```{r}
+tiss <- ilabs.tpsi %>% dplyr::filter(Usage.Type == "N/A") %>% dplyr::filter(Unit.of.Measure %in% c("hour", "Sample", "set", "slide", "each"))
+```
+
+#### Check the data
+
+```{r}
+table(tiss$Unit.of.Measure)
+```
+
+#### Prepare Tissue Processing pie chart
+
+```{r}
+tiss.pie <- tiss %>%
+    mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Tissue Processing Units",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+tiss.pie
+```
+
+# Plot the pie charts figure
+
+```{r,fig.width=16,fig.height=4}
+instr.pie + inst.train.pie + path.pie + tiss.pie + plot_layout(ncol = 4, guides = "collect")
+
+combo.pie <- instr.pie + inst.train.pie + path.pie + tiss.pie + plot_layout(ncol = 4, guides = "collect")
+ggsave("figures/TPSI_combo.pie.pdf", 
+       plot = combo.pie, 
+       dpi = 150, 
+       width = 20, 
+       height = 4, 
+       units = "in")
+```
+
 
 # Write annotated output file
 

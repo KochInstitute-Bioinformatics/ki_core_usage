@@ -20,10 +20,7 @@ knitr::opts_chunk$set(
   error = TRUE,
   cache = TRUE,
   cache.lazy = FALSE,
-  fig.retina = 2,
-  fig.width = 6,
-  fig.height = 6,
-  dpi = 300
+  fig.retina = 2
 )
 
 # For bioinformatics (Seurat, parallel)
@@ -41,6 +38,7 @@ library(ggpubr)
 library(purrr)
 library(knitr)
 library(lubridate)
+library(patchwork)
 ```
 
 # Data Import
@@ -53,8 +51,8 @@ For this reporting, the date range is 1/1/20-10/31/25
 Additional exports files can be added as needed
 
 ```{r}
-Part1 <- read.csv("../data/01012020_12312022_ALL Cores_Completed.csv")
-Part2 <- read.csv("../data/01012023_10312025_ALL Cores_Completed.csv")
+Part1 <- read.csv("../data/01012020_12312022_ALL_Cores_Completed.csv")
+Part2 <- read.csv("../data/01012023_10312025_ALL_Cores_Completed.csv")
 ```
 
 ## Join the parts together into a single ilabs R object
@@ -140,8 +138,7 @@ cat("Dimensions of imported ilabs data after exluding unecessary email columns:"
 
 ## Additional columns to exlude for simplicity
 
-Our reporting here aims to summarize quantities rather than dollars so
-some columns are not necessary also Asset.ID is not needed
+some billing-related columns are not necessary also Asset.ID is not needed
 
 ```{r}
 ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Asset.ID,-Customer.Title,-Payment.Information,-Cost.Object,
@@ -198,7 +195,7 @@ Check the relationship
 table(ki.ilabs.simple$Core.Name,ki.ilabs.simple$Core.ID)
 ```
 
-Exlclude Core.ID
+Exclude Core.ID
 
 ```{r}
 ki.ilabs.simple <- ki.ilabs.simple %>% dplyr::select(-Core.ID)
@@ -215,7 +212,7 @@ All the remaining columns have some potential utility in report generation
 # Export the ilabs data for use in other scripts
 
 ```{r}
-write.xlsx(ki.ilabs.simple,"../data/stock_ilabs.xlsx")
+# write.xlsx(ki.ilabs.simple,"../data/stock_ilabs.xlsx")
 ```
 
 # Prepare Faculty.Key column

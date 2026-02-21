@@ -656,11 +656,18 @@ lip.met.pie <- lip.met %>%
          Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
-  geom_text(aes(label = Label), 
-            position = position_stack(vjust = 0.5),
-            size = 3,
-            fontface = "bold",
-            color = "white") +
+  geom_text_repel(aes(label = Label,
+                      vjust = case_when(Sponsor_ForPlot == "Center_Member" ~ 3.5,
+                                        TRUE ~ 0.5),
+                      segment.size = case_when(Sponsor_ForPlot == "Center_Member" ~ 0,
+                                               TRUE ~ 0.5)),
+                  size = 3,
+                  fontface = "bold",
+                  color = "white",
+                  force = 60,
+                  force_pull = 8.5,
+                  direction = "both",
+                  max.overlaps = Inf) +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
   labs(title = "Lipid or Metabolite Profiling",

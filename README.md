@@ -93,7 +93,7 @@ For each core, there are 4 steps in the processing:
 ### TPSI
 
 - [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/TPSI_processing.Rmd)
-- [report]()
+- [report](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/TPSI_processing.html)
 - [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/tpsi.final.xlsx)
 - [figure]()
 
