@@ -28,6 +28,9 @@ options(future.globals.maxSize = 8e10)
 
 # Optional: seed for reproducibility
 set.seed(42)
+
+# Clear knitr cache
+unlink("PMIT_Processing_cache", recursive = TRUE)
 ```
 
 ```{r}
@@ -502,6 +505,7 @@ cat("Rows image.test.2:", dim(image.test.2)[1], "\n")
 
 ```{r}
 image.test <- rbind(image.test.1,image.test.2)
+write.xlsx(image.test, file="pmit_DataAnalysisImageTesting.xlsx")
 ```
 
 ### Prepare Data Analysis: Imaging and Testing pie chart
@@ -540,9 +544,9 @@ image.test.pie
 # Plot the pie charts figure
 
 ```{r,fig.width=25,fig.height=4}
-train.pie + use.pie + image.test.pie + model.serv.pie + testing.serv.pie + plot_layout(ncol = 5, guides = "collect")
+model.serv.pie + train.pie + use.pie + testing.serv.pie + image.test.pie + plot_layout(ncol = 5, guides = "collect")
 
-combo.pie <- train.pie + use.pie + image.test.pie + model.serv.pie + testing.serv.pie + plot_layout(ncol = 5, guides = "collect")
+combo.pie <- model.serv.pie + train.pie + use.pie + testing.serv.pie + image.test.pie + plot_layout(ncol = 5, guides = "collect")
 ggsave("figures/PMIT_combo.pie.pdf", 
        plot = combo.pie, 
        dpi = 150, 

@@ -28,6 +28,9 @@ options(future.globals.maxSize = 8e10)
 
 # Optional: seed for reproducibility
 set.seed(42)
+
+# Clear knitr cache
+unlink("hts_Processing_cache", recursive = TRUE)
 ```
 
 ```{r}
@@ -50,6 +53,9 @@ Select both cores with MIT BioMicro Center in name
 ```{r}
 ilabs <- read.xlsx("../data/stock_ilabs.xlsx")
 ilabs.igt <- ilabs %>% dplyr::filter(Core.Name %in% c("KI Genomics Core / MIT BioMicro Center","KI Genomics Core / MIT BioMicro Center and KI High Throughput Sciences Core"))
+cat("Dimensions of ilabs.igt:", dim(ilabs.igt), "\n")
+ilabs.igt <- ilabs.igt %>% dplyr::filter(!(Category == "Technical Assistance" & stringr::str_starts(Charge.Name, "HTS")))
+cat("Dimensions of ilabs.igt:", dim(ilabs.igt), "\n")
 rm(ilabs)
 ```
 
@@ -331,35 +337,31 @@ sponsor_colors <- c(
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 ```
 
-### Instrument Use: Assisted or Training
+### ???
 
-Include usage.type that includes "assisted", "training" or "unattended"
-Include usage.type = N/A and Category = "SEM/FIB/Airyscan charges"
-Include usage.type = N/A and Category = "Technical Time" and Charge.Name contains "Training",
-Include usage.type = N/A and Category = TEM/Cryo-TEM charges and Charge.Name does NOT include "Sample" or "Cryoplunging"
-
+Rules
 
 ```{r}
-train.1 <- ilabs.nano %>% dplyr::filter(str_detect(Usage.Type, "Assisted|Training|Unattended"))
+train.1 <- igt.final %>% dplyr::filter(str_detect(Usage.Type, "Assisted|Training|Unattended"))
 cat("Rows train1:", dim(train.1)[1], "\n")
-train.2 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & Category == "SEM/FIB/Airyscan charges")
+train.2 <- igt.final %>% dplyr::filter(Usage.Type == "N/A" & Category == "SEM/FIB/Airyscan charges")
 cat("Rows train2:", dim(train.2)[1], "\n")
-train.3 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & Category == "Technical Time" & str_detect(Charge.Name, "Training"))
+train.3 <- igt.final %>% dplyr::filter(Usage.Type == "N/A" & Category == "Technical Time" & str_detect(Charge.Name, "Training"))
 cat("Rows train3:", dim(train.3)[1], "\n")
-train.4 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & 
+train.4 <- igt.final %>% dplyr::filter(Usage.Type == "N/A" & 
                                           Category == "TEM/Cryo-TEM charges" & 
                                           !str_detect(Charge.Name, "Cryoplunging") & 
                                           !str_detect(Charge.Name, regex("Sample",ignore_case = TRUE)))
 cat("Rows train4:", dim(train.4)[1], "\n")
 ```
 
-#### Combine the train objects
+#### Combine the ? objects
 
 ```{r}
 train <- rbind(train.1,train.2,train.3,train.4)
 ```
 
-### Prepare Instrument Use: Assisted or Training pie chart
+### Prepare ? pie chart
 
 ```{r}
 train.pie <- train %>%
@@ -367,7 +369,7 @@ train.pie <- train %>%
   group_by(Sponsor_ForPlot) %>%
   summarise(Quantity = sum(Quantity), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[NanoFIB_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key[DSMI_IGT_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
             .groups = "drop") %>%
   mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
@@ -384,7 +386,7 @@ train.pie <- train %>%
             color = "white") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Instrument Use: Assisted or Training Hours",
+  labs(title = "???",
        fill = "Sponsor") +
   theme_void() +
   theme(legend.position = "right")

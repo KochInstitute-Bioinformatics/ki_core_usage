@@ -114,9 +114,9 @@ For each core, there are 4 steps in the processing:
 ### HTS
 
 - [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/HTS_Processing.Rmd)
-- [report]()
+- [report](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/HTS_Processing.html)
 - [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/hts.final.xlsx)
-- [figure]()
+- [figure](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/figures/HTS_combo.pie.pdf)
 
 ### NanoFIB
 
