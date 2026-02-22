@@ -315,45 +315,6 @@ Manually annotate Service.Group based on data in Service.Group.working and impor
 #   )
 ```
 
-# Rate Modifiers
-
-This is being paused now - using consistent units (each and hours instead)
-
-## Import rate modifier data
-
-```{r}
-# rate.mod <- read.xlsx("../data/rateModifiers.xlsx")
-# rate.mod
-```
-
-## Join the 2 different rate modifiers to igt.final using SponsorCategory
-
-This should be validated by looking for Customer.Lab values that have more than 1 rate.modifier
-
-```{r}
-# msbp.final <- msbp.final %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, BP_modifier),
-#     by = c("BioPol_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, metpro_modifier),
-#     by = c("MetPro_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   mutate(rate.modifier = case_when(
-#     Core.Name == "Biopolymers & Proteomics Core" ~ BP_modifier,
-#     Core.Name == "metpro" ~ metpro_modifier,
-#     TRUE ~ NA_real_
-#   )) %>%
-#   select(-BP_modifier, -metpro_modifier)  # clean up temporary columns
-```
-
-## Create adjusted Total.Price values based on assigned rate.modifier values
-
-```{r}
-# msbp.final <- msbp.final %>% dplyr::mutate(Adjusted.Total.Price = Total.Price * rate.modifier)
-```
-
 # Data Visualizations
 
 ## Define Colors
@@ -370,61 +331,35 @@ sponsor_colors <- c(
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 ```
 
-## ?? Data
+### Instrument Use: Assisted or Training
 
-### Extract the data from the main dataframe
+Include usage.type that includes "assisted", "training" or "unattended"
+Include usage.type = N/A and Category = "SEM/FIB/Airyscan charges"
+Include usage.type = N/A and Category = "Technical Time" and Charge.Name contains "Training",
+Include usage.type = N/A and Category = TEM/Cryo-TEM charges and Charge.Name does NOT include "Sample" or "Cryoplunging"
 
-```{r}
-# train <- igt.final %>% dplyr::filter(Category == "Training")
-# dim(train)
-# old.train <- dsmi.final %>% dplyr::filter(Category == "Hours of Service " & Charge.Name == "Training Session")
-# dim(old.train)
-# train <- rbind(train,old.train)
-# dim(train)
-```
-
-### Check the results
 
 ```{r}
-# head(train)
+train.1 <- ilabs.nano %>% dplyr::filter(str_detect(Usage.Type, "Assisted|Training|Unattended"))
+cat("Rows train1:", dim(train.1)[1], "\n")
+train.2 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & Category == "SEM/FIB/Airyscan charges")
+cat("Rows train2:", dim(train.2)[1], "\n")
+train.3 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & Category == "Technical Time" & str_detect(Charge.Name, "Training"))
+cat("Rows train3:", dim(train.3)[1], "\n")
+train.4 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & 
+                                          Category == "TEM/Cryo-TEM charges" & 
+                                          !str_detect(Charge.Name, "Cryoplunging") & 
+                                          !str_detect(Charge.Name, regex("Sample",ignore_case = TRUE)))
+cat("Rows train4:", dim(train.4)[1], "\n")
 ```
 
-### Prepare Training bar chart
+#### Combine the train objects
 
-```{r,fig.width=5,fig.height=6}
-train.bar <- train %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Training",
-       x = "Sponsor Group",
-       y = "Sessions Attended",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-train.bar
+```{r}
+train <- rbind(train.1,train.2,train.3,train.4)
 ```
 
-### Prepare proteomics pie chart
+### Prepare Instrument Use: Assisted or Training pie chart
 
 ```{r}
 train.pie <- train %>%
@@ -432,7 +367,7 @@ train.pie <- train %>%
   group_by(Sponsor_ForPlot) %>%
   summarise(Quantity = sum(Quantity), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key[NanoFIB_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
             .groups = "drop") %>%
   mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
@@ -449,7 +384,7 @@ train.pie <- train %>%
             color = "white") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Training Sessions Attended",
+  labs(title = "Instrument Use: Assisted or Training Hours",
        fill = "Sponsor") +
   theme_void() +
   theme(legend.position = "right")
@@ -457,272 +392,13 @@ train.pie <- train %>%
 train.pie
 ```
 
-## Project Hours Data
-
-### Extract the data from the main dataframe
-
-```{r}
-hours <- dsmi.final %>% dplyr::filter(Category %in% c("Bioinformatics","Hours of Service ", "Prepaid Support"))
-dim(hours)
-```
-
-### Identify rows to exclude from this selected group
-
-```{r}
-toExclude <- hours %>% dplyr::filter(Charge.Name %in% c("Bioinformatics Support",
-                                                     "Custom Service: BMC ",
-                                                     "Informatics Support FTE support",
-                                                     "Training Session",
-                                                     "Stem Cell Initiative Pipeline and ONT work",
-                                                     "Informatics Support - FEB",
-                                                     "Informatics Support - JAN",
-                                                     "Prepaid Bioinformatics Support (KI)",
-                                                     "Prepaid Bioinformatics Support"
-                                                     ))
-dim(toExclude)
-table(toExclude$Charge.Name)
-```
-
-### Negate the selection to exclude
-
-```{r}
-hours <- hours %>% dplyr::filter(!Charge.Name %in% c("Bioinformatics Support",
-                                                     "Custom Service: BMC ",
-                                                     "Informatics Support FTE support",
-                                                     "Training Session",
-                                                     "Stem Cell Initiative Pipeline and ONT work",
-                                                     "Informatics Support - FEB",
-                                                     "Informatics Support - JAN",
-                                                     "Prepaid Bioinformatics Support (KI)",
-                                                     "Prepaid Bioinformatics Support"
-                                                     ))
-```
-
-### Check the data
-
-```{r}
-dim(hours)
-table(hours$Charge.Name)
-table(hours$Unit.of.Measure)
-table(hours$Price)
-```
-
-### Manipulte Project - CO-OP (for sponsor projects only) Quantity
-
-This value is currently reported in days. For each unit, multiple by 2  - each Co-OP day is counted as 2 hours.
-
-```{r}
-hours <- hours %>% dplyr::mutate(
-  Quantity = dplyr::case_when(
-    Charge.Name == "Project - CO-OP" ~ Quantity * 2,
-    TRUE ~ Quantity
-  )
-)
-```
-
-One value in the dataframe has a Quantity = NA, this will set it to 0
-
-```{r}
-hours <- hours %>% dplyr::mutate(
-  Quantity = dplyr::case_when(
-    is.na(Quantity) ~ 0,
-    TRUE ~ Quantity
-  )
-)
-```
-
-### hours object needs to by split into 2 set, one project hours, one data managment
-
-```{r}
-hours.dmac <- hours %>% dplyr::filter(Service.ID %in% c("\tBCC-KAMM prepaid bioinformatics 2023-0.2",
-  "BCC-ANK-prepaid bioinformatics-0.2",
-  "BCC-BPE-1820",
-  "BCC-BPE-1828",
-  "BCC-CG-1442",
-  "BCC-DAL-1627",
-  "BCC-ENGELWARD prepaid bioinformatics 2022-0.45",
-  "BCC-ENGELWARD prepaid bioinformatics 2023-0.45",
-  "BCC-ENGELWARD prepaid bioinformatics-0.425",
-  "BCC-FMW-2647",
-  "BCC-KAMM prepaid bioinformatics 2022-0.2",
-  "BCC-KAMM prepaid bioinformatics-0.2",
-  "BCC-Lauffenburger/Data Management Core (IMPAcTB)-prepaid bioinformatics",
-  "BCC-LGG-2241",
-  "BCC-LGG-prepaid bioinformatics-0.2",
-  "BCC-SELIN-prepaid bioinformatics 0.935 - 2019-2020",
-  "BCC-WHITE prepaid bioinformatics-0.2"))
-
-hours.project <- hours %>% dplyr::filter(!Service.ID %in% c("\tBCC-KAMM prepaid bioinformatics 2023-0.2",
-  "BCC-ANK-prepaid bioinformatics-0.2",
-  "BCC-BPE-1820",
-  "BCC-BPE-1828",
-  "BCC-CG-1442",
-  "BCC-DAL-1627",
-  "BCC-ENGELWARD prepaid bioinformatics 2022-0.45",
-  "BCC-ENGELWARD prepaid bioinformatics 2023-0.45",
-  "BCC-ENGELWARD prepaid bioinformatics-0.425",
-  "BCC-FMW-2647",
-  "BCC-KAMM prepaid bioinformatics 2022-0.2",
-  "BCC-KAMM prepaid bioinformatics-0.2",
-  "BCC-Lauffenburger/Data Management Core (IMPAcTB)-prepaid bioinformatics",
-  "BCC-LGG-2241",
-  "BCC-LGG-prepaid bioinformatics-0.2",
-  "BCC-SELIN-prepaid bioinformatics 0.935 - 2019-2020",
-  "BCC-WHITE prepaid bioinformatics-0.2"))
-```
-
-### Check the data
-
-```{r}
-dim(hours)
-dim(hours.dmac)
-dim(hours.project)
-```
-
-### Prepare Project Hours bar chart
-
-```{r,fig.width=5,fig.height=6}
-proj.hours.bar <- hours.project %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Project Hours",
-       x = "Sponsor Group",
-       y = "Hours",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-proj.hours.bar
-```
-
-### Prepare project hours pie chart
-
-```{r}
-proj.hours.pie <- hours.project %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            position = position_stack(vjust = 0.5),
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  coord_polar("y", start = 0) +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Project Hours",
-       fill = "Sponsor") +
-  theme_void() +
-  theme(legend.position = "right")
-
-proj.hours.pie
-```
-
-### Prepare DMAC Hours bar chart
-
-```{r,fig.width=5,fig.height=6}
-dmac.hours.bar <- hours.dmac %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Data Management Hours",
-       x = "Sponsor Group",
-       y = "Hours",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-dmac.hours.bar
-```
-
-### Prepare project hours pie chart
-
-```{r}
-dmac.hours.pie <- hours.dmac %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            position = position_stack(vjust = 0.5),
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  coord_polar("y", start = 0) +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Data Management Hours",
-       fill = "Sponsor") +
-  theme_void() +
-  theme(legend.position = "right")
-
-dmac.hours.pie
-```
-
 # Plot the pie charts figure
 
-
 ```{r,fig.width=16,fig.height=4}
-train.pie + proj.hours.pie + dmac.hours.pie + plot_layout(ncol = 3, guides = "collect")
+trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
 
-combo.pie <- train.pie + proj.hours.pie + dmac.hours.pie + plot_layout(ncol = 3, guides = "collect")
-ggsave("figures/DSMI_combo.pie.pdf", 
+combo.pie <- trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
+ggsave("figures/IGT_combo.pie.pdf", 
        plot = combo.pie, 
        dpi = 150, 
        width = 16, 

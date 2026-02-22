@@ -38,6 +38,7 @@ library(ggpubr)
 library(purrr)
 library(knitr)
 library(lubridate)
+library(patchwork)
 ```
 
 # Data Import
@@ -161,82 +162,8 @@ ilabs.pmit <- ilabs.pmit %>% dplyr::mutate(Charge.Name.Short = stringr::str_trim
 ### Check the results
 
 ```{r}
-table(ilabs.pmit$Charge.Name.Short)
+as.data.frame(table(ilabs.pmit$Charge.Name.Short)) %>% arrange(desc(Freq))
 ```
-
-Information about what was done is stored in 2 columns: Service.Type and Charge.Name
-
-```{r}
-# ilabs.pmit <- ilabs.pmit %>%
-#   mutate(Service.Group.working = case_when(
-#     Core.Name == "Biopolymers & Proteomics Core" ~ Service.Type,
-#     Core.Name == "metpro" ~ Charge.Name,
-#     TRUE ~ NA_character_  # default for any other cases
-#   ))
-# 
-# cat("Dimensions of Service.Group.working dataframe:", dim(as.data.frame(table(ilabs.pmit$Service.Group.working))), "\n")
-# 
-# msbp.Service.Group.working.df <- as.data.frame(table(ilabs.pmit$Service.Group.working))
-# write.xlsx(msbp.Service.Group.working.df,file="msbp.Service.Group.working.df.xlsx")
-```
-
-## Import manually annotated service groups
-
-Manually annotate Service.Group based on data in Service.Group.working and import the results
-
-```{r}
-# msbp.Service.Groups <- read.xlsx("../data/msbp.Service.Group.Annotation.xlsx")
-```
-
-## Join Service.Group to ilabs.pmit
-
-```{r}
-# ilabs.pmit <- ilabs.pmit %>%
-#   dplyr::left_join(
-#     msbp.Service.Groups %>% dplyr::select(Service.Group.working, Service.Group),
-#     by = "Service.Group.working"
-#   )
-```
-
-# Rate Modifiers
-
-This is being paused now - using consistent units (each and hours instead)
-
-## Import rate modifier data
-
-```{r}
-# rate.mod <- read.xlsx("../data/rateModifiers.xlsx")
-# rate.mod
-```
-
-## Join the 2 different rate modifiers to ilabs.pmit using SponsorCategory
-
-This should be validated by looking for Customer.Lab values that have more than 1 rate.modifier
-
-```{r}
-# msbp.final <- msbp.final %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, BP_modifier),
-#     by = c("BioPol_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, metpro_modifier),
-#     by = c("MetPro_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   mutate(rate.modifier = case_when(
-#     Core.Name == "Biopolymers & Proteomics Core" ~ BP_modifier,
-#     Core.Name == "metpro" ~ metpro_modifier,
-#     TRUE ~ NA_real_
-#   )) %>%
-#   select(-BP_modifier, -metpro_modifier)  # clean up temporary columns
-```
-
-## Create adjusted Total.Price values based on assigned rate.modifier values
-
-```{r}
-# msbp.final <- msbp.final %>% dplyr::mutate(Adjusted.Total.Price = Total.Price * rate.modifier)
-```
-
 # Data Visualizations
 
 ## Define Colors
@@ -253,9 +180,376 @@ sponsor_colors <- c(
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 ```
 
-## Pie Charts
+### Instrument Use: Assisted or Training
 
-Here we need to define what wants to be plotted, and how to select the data.
+Include usage.type that includes “Assisted", “Consultation”, or “Training” (n=1854)
+Exclude usage.type that includes “Assisted Data Analysis” (n=31)
+Include usage.type = N/A and Category = “CFT Services” (n=58)
+Include usage.type = N/A and Category = “PET consumables and time" and Unit.of.Measure = hours (n=291)
+Include usage.type = N/A and Category = “PET consumables and time" and Unit.of.Measure = sample (n=34), count = sum of quantity/100
+
+
+```{r}
+train.1 <- ilabs.pmit %>% dplyr::filter(str_detect(Usage.Type, "Assisted|Consultation|Training")) %>% dplyr::filter(!Usage.Type == "Assisted Data Analysis")
+cat("Rows train1:", dim(train.1)[1], "\n")
+train.2 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & Category %in% c("CFT services"))
+cat("Rows train2:", dim(train.2)[1], "\n")
+train.3 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & Category %in% c("PET consumables and time") & Unit.of.Measure == "hour")
+cat("Rows train3:", dim(train.3)[1], "\n")
+train.4 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & Category %in% c("PET consumables and time") & Unit.of.Measure == "Sample")
+# adjust the Quantity for train.4 (Samples) by dividing value by 100
+train.4 <- train.4 %>%dplyr::mutate(Quantity = Quantity / 100)
+cat("Rows train4:", dim(train.4)[1], "\n")
+```
+
+#### Combine the train objects
+
+```{r}
+train <- rbind(train.1,train.2,train.3,train.4)
+```
+
+### Prepare Instrument Use: Assisted or Training pie chart
+
+```{r}
+train.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Instrument Use: Assisted or Training Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+train.pie
+```
+
+### Instrument Use: Trained
+
+Include usage.type that includes “Independent", or “Trained” (n=16844)
+Include usage.type = N/A and Category = “Equipment Usage” (n=92)
+
+```{r}
+use.1 <- ilabs.pmit %>% dplyr::filter(str_detect(Usage.Type, "Independent|Trained")) %>% dplyr::filter(!Usage.Type == "Assisted Data Analysis")
+cat("Rows use.1:", dim(use.1)[1], "\n")
+use.2 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & Category %in% c("Equipment Usage"))
+cat("Rows use.2:", dim(use.2)[1], "\n")
+```
+
+#### Combine the use objects
+
+```{r}
+use <- rbind(use.1,use.2)
+```
+
+### Prepare Instrument Use: Trained pie chart
+
+```{r}
+use.pie <- use %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Instrument Use: Trained Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+use.pie
+```
+
+## Modeling Services
+Include usage.type = N/A and Category = “Cell Testing Services" and Unit.of.Measure = Sample (n=585) - avg chg per unit = $40.60
+Include usage.type = N/A and Category = “ES Cell Culture" and Unit.of.Measure = Each or Set (n=62) - avg chg per unit = $360.04
+Include usage.type = N/A and Category = “Gene Targeting in ES Cells" (n=13) - avg chg per unit = $3062.79
+Include usage.type = N/A and Category = “Microinjection" (n=38) - avg chg per unit = $341.92
+Include usage.type = N/A and Category = “Request Cells" (n=315) - avg chg per unit = $137.96
+Include usage.type = N/A and Category = (Blanks) (n=13) - avg chg per unit = $25
+Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Assisted Work” n=315) - avg chg per unit = $133.80
+Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Monthly Charge” (n=30) - avg chg per unit = $927.40
+Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Consultation” and Core.Name contains “ES Cell” or “Modeling” (n=34) - avg chg per unit = $203.23
+Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Training” and Core.Name contains “ES Cell” or “Modeling” (n=23) - avg chg per unit = $126.96
+
+```{r}
+model.serv.1 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "Cell Testing Services" & 
+                                                 Unit.of.Measure == "Sample")
+cat("Rows model.serv.1:", dim(model.serv.1)[1], "\n")
+model.serv.1.priceMean <- mean(model.serv.1$Price, na.rm = TRUE)
+cat("Mean model.serv.1:", model.serv.1.priceMean, "\n")
+model.serv.1 <- model.serv.1 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.1.priceMean,0))
+
+model.serv.2 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "ES Cell Culture" & 
+                                                 Unit.of.Measure %in% c("each","set"))
+cat("Rows model.serv.2:", dim(model.serv.2)[1], "\n")
+model.serv.2.priceMean <- mean(model.serv.2$Price, na.rm = TRUE)
+cat("Mean model.serv.3:", model.serv.2.priceMean, "\n")
+model.serv.2 <- model.serv.2 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.2.priceMean,0))
+
+model.serv.3 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "Gene Targeting in ES cells")
+cat("Rows model.serv.3:", dim(model.serv.3)[1], "\n")
+model.serv.3.priceMean <- mean(model.serv.3$Price, na.rm = TRUE)
+cat("Mean model.serv.3:", model.serv.3.priceMean, "\n")
+model.serv.3 <- model.serv.3 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.3.priceMean,0))
+
+model.serv.4 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "Microinjection")
+cat("Rows model.serv.4:", dim(model.serv.4)[1], "\n")
+model.serv.4.priceMean <- mean(model.serv.4$Price, na.rm = TRUE)
+cat("Mean model.serv.4:", model.serv.4.priceMean, "\n")
+model.serv.4 <- model.serv.4 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.4.priceMean,0))
+
+model.serv.5 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "Request Cells")
+cat("Rows model.serv.5:", dim(model.serv.5)[1], "\n")
+model.serv.5.priceMean <- mean(model.serv.5$Price, na.rm = TRUE)
+cat("Mean model.serv.5:", model.serv.5.priceMean, "\n")
+model.serv.5 <- model.serv.5 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.5.priceMean,0))
+
+model.serv.6 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "")
+cat("Rows model.serv.6:", dim(model.serv.6)[1], "\n")
+model.serv.6.priceMean <- mean(model.serv.6$Price, na.rm = TRUE)
+cat("Mean model.serv.6:", model.serv.6.priceMean, "\n")
+model.serv.6 <- model.serv.6 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.6.priceMean,0))
+
+model.serv.7 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                               Category == "Hourly Services" & 
+                                               Charge.Name == "Assisted Work")
+cat("Rows model.serv.7:", dim(model.serv.7)[1], "\n")
+model.serv.7.priceMean <- mean(model.serv.7$Price, na.rm = TRUE)
+cat("Mean model.serv.7:", model.serv.7.priceMean, "\n")
+model.serv.7 <- model.serv.7 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.7.priceMean,0))
+
+model.serv.8 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                               Category == "Hourly Services" & 
+                                               str_detect(Charge.Name,"Monthly Charge"))
+cat("Rows model.serv.8:", dim(model.serv.8)[1], "\n")
+model.serv.8.priceMean <- mean(model.serv.8$Price, na.rm = TRUE)
+cat("Mean model.serv.8:", model.serv.8.priceMean, "\n")
+model.serv.8 <- model.serv.8 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.8.priceMean,0))
+
+model.serv.9 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                               Category == "Hourly Services" & 
+                                               str_detect(Charge.Name,"Consultation") &
+                                               str_detect(Core.Name, "ES|Modeling"))
+cat("Rows model.serv.9:", dim(model.serv.9)[1], "\n")
+model.serv.9.priceMean <- mean(model.serv.9$Price, na.rm = TRUE)
+cat("Mean model.serv.9:", model.serv.9.priceMean, "\n")
+model.serv.9 <- model.serv.9 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.9.priceMean,0))
+
+model.serv.10 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "Hourly Services" & 
+                                                Charge.Name == "Training" & 
+                                                str_detect(Core.Name, "ES|Modeling"))
+cat("Rows model.serv.10:", dim(model.serv.10)[1], "\n")
+model.serv.10.priceMean <- mean(model.serv.10$Price, na.rm = TRUE)
+cat("Mean model.serv.10:", model.serv.10.priceMean, "\n")
+model.serv.10 <- model.serv.10 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.10.priceMean,0))
+```
+
+#### Combine the model.serv objects
+
+```{r}
+model.serv <- rbind(model.serv.1,model.serv.2,model.serv.3,
+                    model.serv.4,model.serv.5,model.serv.6,
+                    model.serv.7,model.serv.8,model.serv.9,
+                    model.serv.10)
+```
+
+### Prepare Modeling Services pie chart
+
+```{r}
+model.serv.pie <- model.serv %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity.Norm), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Modeling Services Normalized Charges",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+model.serv.pie
+```
+
+## Testing Services
+
+Include usage.type = N/A and Category = “Animals and Husbandry" and Unit.of.Measure = hour (n=794)
+Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Consultation” and Core.Name contains “Animal” (n=66)
+Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Training” and Core.Name contains “Animal” (n=23)
+
+```{r}
+testing.serv.1 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & Category == "Animals and Husbandry" & Unit.of.Measure == "hour")
+cat("Rows testing.serv.1:", dim(testing.serv.1)[1], "\n")
+testing.serv.2 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "Hourly Services" & 
+                                                 str_detect(Charge.Name, "Consultation") & 
+                                                 str_detect(Core.Name, "Animal"))
+cat("Rows testing.serv.2:", dim(testing.serv.2)[1], "\n")
+testing.serv.3 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
+                                                 Category == "Hourly Services" & 
+                                                 str_detect(Charge.Name, "Training") & 
+                                                 str_detect(Core.Name, "Animal"))
+cat("Rows testing.serv.3:", dim(testing.serv.3)[1], "\n")
+```
+
+#### Combine the testing.serv objects
+
+```{r}
+testing.serv <- rbind(testing.serv.1,testing.serv.2,testing.serv.3)
+```
+
+### Prepare Testing Services pie chart
+
+```{r}
+testing.serv.pie <- testing.serv %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Testing Services Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+testing.serv.pie
+```
+
+## Data Analysis: Imaging and Testing
+
+Include usage.type that includes “Analysis” (n=43)
+Include usage.type = N/A and Category = “Hourly Services" and Charge.Name includes = “Analysis” (n=100)
+
+```{r}
+image.test.1 <- ilabs.pmit %>% dplyr::filter(str_detect(Usage.Type, "Analysis"))
+cat("Rows image.test.1:", dim(image.test.1)[1], "\n")
+image.test.2 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & Category == "Hourly Services" & str_detect(Charge.Name, "Analysis"))
+cat("Rows image.test.2:", dim(image.test.2)[1], "\n")
+```
+
+#### Combine the image.test objects
+
+```{r}
+image.test <- rbind(image.test.1,image.test.2)
+```
+
+### Prepare Data Analysis: Imaging and Testing pie chart
+
+```{r}
+image.test.pie <- image.test %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Data Analysis: Imaging and Testing Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+image.test.pie
+```
+
+# Plot the pie charts figure
+
+```{r,fig.width=25,fig.height=4}
+train.pie + use.pie + image.test.pie + model.serv.pie + testing.serv.pie + plot_layout(ncol = 5, guides = "collect")
+
+combo.pie <- train.pie + use.pie + image.test.pie + model.serv.pie + testing.serv.pie + plot_layout(ncol = 5, guides = "collect")
+ggsave("figures/PMIT_combo.pie.pdf", 
+       plot = combo.pie, 
+       dpi = 150, 
+       width = 25, 
+       height = 4, 
+       units = "in")
+```
 
 # Write annotated output file
 

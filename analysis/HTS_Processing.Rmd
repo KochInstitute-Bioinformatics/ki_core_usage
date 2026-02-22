@@ -210,46 +210,6 @@ Manually annotate Service.Group based on data in Service.Group.working and impor
 #     by = "Service.Group.working"
 #   )
 ```
-
-# Rate Modifiers
-
-This is being paused now - using consistent units (each and hours instead)
-
-## Import rate modifier data
-
-```{r}
-# rate.mod <- read.xlsx("../data/rateModifiers.xlsx")
-# rate.mod
-```
-
-## Join the 2 different rate modifiers to ilabs.hts using SponsorCategory
-
-This should be validated by looking for Customer.Lab values that have more than 1 rate.modifier
-
-```{r}
-# msbp.final <- msbp.final %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, BP_modifier),
-#     by = c("BioPol_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, metpro_modifier),
-#     by = c("MetPro_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   mutate(rate.modifier = case_when(
-#     Core.Name == "Biopolymers & Proteomics Core" ~ BP_modifier,
-#     Core.Name == "metpro" ~ metpro_modifier,
-#     TRUE ~ NA_real_
-#   )) %>%
-#   select(-BP_modifier, -metpro_modifier)  # clean up temporary columns
-```
-
-## Create adjusted Total.Price values based on assigned rate.modifier values
-
-```{r}
-# msbp.final <- msbp.final %>% dplyr::mutate(Adjusted.Total.Price = Total.Price * rate.modifier)
-```
-
 # Data Visualizations
 
 ## Define Colors
@@ -266,9 +226,80 @@ sponsor_colors <- c(
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 ```
 
-## Pie Charts
+### Instrument Use: Assisted or Training
 
-Here we need to define what wants to be plotted, and how to select the data.
+Include usage.type that includes "assisted", "training" or "unattended"
+Include usage.type = N/A and Category = "SEM/FIB/Airyscan charges"
+Include usage.type = N/A and Category = "Technical Time" and Charge.Name contains "Training",
+Include usage.type = N/A and Category = TEM/Cryo-TEM charges and Charge.Name does NOT include "Sample" or "Cryoplunging"
+
+
+```{r}
+train.1 <- ilabs.nano %>% dplyr::filter(str_detect(Usage.Type, "Assisted|Training|Unattended"))
+cat("Rows train1:", dim(train.1)[1], "\n")
+train.2 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & Category == "SEM/FIB/Airyscan charges")
+cat("Rows train2:", dim(train.2)[1], "\n")
+train.3 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & Category == "Technical Time" & str_detect(Charge.Name, "Training"))
+cat("Rows train3:", dim(train.3)[1], "\n")
+train.4 <- ilabs.nano %>% dplyr::filter(Usage.Type == "N/A" & 
+                                          Category == "TEM/Cryo-TEM charges" & 
+                                          !str_detect(Charge.Name, "Cryoplunging") & 
+                                          !str_detect(Charge.Name, regex("Sample",ignore_case = TRUE)))
+cat("Rows train4:", dim(train.4)[1], "\n")
+```
+
+#### Combine the train objects
+
+```{r}
+train <- rbind(train.1,train.2,train.3,train.4)
+```
+
+### Prepare Instrument Use: Assisted or Training pie chart
+
+```{r}
+train.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Quantity), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[NanoFIB_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Instrument Use: Assisted or Training Hours",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+train.pie
+```
+
+# Plot the pie charts figure
+
+```{r,fig.width=16,fig.height=4}
+trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
+
+combo.pie <- trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
+ggsave("figures/HTS_combo.pie.pdf", 
+       plot = combo.pie, 
+       dpi = 150, 
+       width = 16, 
+       height = 4, 
+       units = "in")
+```
 
 # Write annotated output file
 

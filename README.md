@@ -107,9 +107,9 @@ For each core, there are 4 steps in the processing:
 ### PMIT
 
 - [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/PMIT_Processing.Rmd)
-- [report]()
+- [report](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/PMIT_Processing.html)
 - [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/pmit.final.xlsx)
-- [figure]()
+- [figure](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/figures/PMIT_combo.pie.pdf)
 
 ### HTS
 
