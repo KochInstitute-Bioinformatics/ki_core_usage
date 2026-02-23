@@ -48,7 +48,7 @@ library(patchwork)
 
 ## Read in ilabs stock data and select Biopolymers rows
 
-Select both cores with MIT BioMicro Center in name
+Select both cores with MIT BioMicro Center in name and filter out HTS charges
 
 ```{r}
 ilabs <- read.xlsx("../data/stock_ilabs.xlsx")
@@ -74,10 +74,31 @@ ilabs.igt %>%
   tidyr::pivot_wider(names_from = Year, values_from = n, values_fill = 0)
 ```
 
-## Read in bmc-external
+## Read in bmc-external and repair problems
+
+Some code has been added here to fix a unprintable character problem
 
 ```{r}
-bmc.ext <- read.xlsx("../data/ExtUsage2025_2510.xlsx")
+bmc.ext <- read.xlsx("../data/ExtUsage2025_2510.xlsx") %>%
+  mutate(LAB = stringr::str_replace_all(LAB, "_x000B_", ""))
+```
+
+Some LAB values are empty, replace them with external
+
+```{r}
+bmc.ext <- bmc.ext %>% dplyr::mutate(LAB = if_else(is.na(LAB), "external", LAB))
+```
+
+Some NUM values are NA, replace them with 1
+
+```{r}
+bmc.ext <- bmc.ext %>% mutate(NUM = replace_na(NUM, 1))
+```
+
+Some COST values are NA
+
+```{r}
+bmc.ext <- bmc.ext %>% mutate(COST = replace_na(COST, 1))
 ```
 
 ### Data Repair - bmc external
@@ -265,6 +286,13 @@ igt.final <- igt.final %>%
   )
 ```
 
+#### Check for missing Faculty.Key or IGT_DSMI_Sponsor values
+
+```{r}
+igt.final %>% dplyr::filter(is.na(Faculty.Key))
+igt.final %>% dplyr::filter(is.na(IGT_DSMI_Sponsor))
+```
+
 ### Simplify sponsor associations for plotting
 
 #### Import simplified categories
@@ -281,44 +309,120 @@ igt.final <- igt.final %>%
   dplyr::left_join(sponsor.toPlot, by = c("IGT_DSMI_Sponsor" = "Sponsor"))
 ```
 
+#### Check for missing Sponsor_ForPlot values
+
+```{r}
+igt.final %>% dplyr::filter(is.na(Sponsor_ForPlot))
+```
+
 # Service Annotation
 
-This may be necessary to facilitate data type selections for plotting
-
-## Gather categrories and output data
-
-Information about what was done is stored in 2 columns: Service.Type and Charge.Name
+## Parse Charge.Name
 
 ```{r}
-# igt.final <- igt.final %>%
-#   mutate(Service.Group.working = case_when(
-#     Core.Name == "Biopolymers & Proteomics Core" ~ Service.Type,
-#     Core.Name == "metpro" ~ Charge.Name,
-#     TRUE ~ NA_character_  # default for any other cases
-#   ))
-# 
-# cat("Dimensions of Service.Group.working dataframe:", dim(as.data.frame(table(igt.final$Service.Group.working))), "\n")
-# 
-# msbp.Service.Group.working.df <- as.data.frame(table(igt.final$Service.Group.working))
-# write.xlsx(msbp.Service.Group.working.df,file="msbp.Service.Group.working.df.xlsx")
+igt.final <- igt.final %>% dplyr::mutate(Charge.Name.Short = stringr::str_trim(stringr::str_extract(Charge.Name, "^[^|]*")))
 ```
 
-## Import manually annotated service groups
-
-Manually annotate Service.Group based on data in Service.Group.working and import the results
+### Check for empty or NA rows, if 0 is reported, there are none
 
 ```{r}
-# msbp.Service.Groups <- read.xlsx("../data/msbp.Service.Group.Annotation.xlsx")
+sum(is.na(igt.final$Charge.Name.Short)) + sum(igt.final$Charge.Name.Short == "", na.rm = TRUE)
 ```
 
-## Join Service.Group to igt.final
+## Prepare and export different usage sets
 
 ```{r}
-# igt.final <- igt.final %>%
-#   dplyr::left_join(
-#     msbp.Service.Groups %>% dplyr::select(Service.Group.working, Service.Group),
-#     by = "Service.Group.working"
-#   )
+Charge.Name.Short.table <- as.data.frame(table(igt.final$Charge.Name.Short))
+Charge.Name.Short.table <- dplyr::rename(Charge.Name.Short.table,Charge.Name.Short = Var1,RowCount = Freq)
+write.xlsx(Charge.Name.Short.table,file="ChargeNameShortTable.xlsx")
+```
+
+### Import manually annotated Charge.Name.Short file
+
+```{r}
+Charge.Name.Short.table.annot <- read.xlsx("ChargeNameShortTable_annotated.xlsx")
+```
+
+### Join Charge.Name.Short annotations to igt.final
+
+#### Make a copy of igt.final so it is easier to restart
+
+```{r}
+igt.final.annot <- igt.final
+```
+
+```{r}
+cat("Dimensions of igt.final.annot before joining annotations:", dim(igt.final.annot), "\n")
+igt.final.annot <- igt.final.annot %>%
+  dplyr::left_join(Charge.Name.Short.table.annot, by = c("Charge.Name.Short" = "Charge.Name.Short"))
+cat("Dimensions of igt.final.annot after joining annotations:", dim(igt.final.annot), "\n")
+```
+
+#### Check for misannotated data
+
+```{r}
+table(igt.final.annot$group)
+```
+
+#### Identify the Category values for things I have annotated as consumable
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::select(Category) %>% table()
+```
+
+#### pull data for controversial annotations
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "10X Visium") %>% 
+  dplyr::select(Charge.Name.Short,Unit.of.Measure,Price)
+igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Assisted") %>% 
+  dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Illumina Library: RNA") %>% 
+  dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Single Cell Services") %>% 
+  dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+```
+
+#### Identify the Category values for things I have annotated as Sequencing and Oligonucleotide Synthesis
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "Sequencing and Oligonucleotide Synthesis") %>% dplyr::select(Category) %>% table()
+```
+
+#### pull data for controversial annotations
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "Sequencing and Oligonucleotide Synthesis") %>% dplyr::filter(Category == "Assisted") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+```
+
+#### Identify the Category values for things I have annotated as Sequencing and Oligonucleotide Synthesis
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::select(Category) %>% table()
+```
+
+#### pull data for controversial annotations
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::filter(Category == "Illumina Sequencing") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+
+igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::filter(Category == "Illumina Sequencing") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price) %>% dplyr::select(Charge.Name.Short) %>% table()
+
+igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::filter(Category == "PacBio Sequencing") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+```
+
+#### Identify the Category values for things I have annotated as Sequencing and Oligonucleotide Synthesis
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing") %>% dplyr::select(Category) %>% table()
+```
+
+#### pull data for controversial annotations
+
+```{r}
+igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing") %>% dplyr::filter(Category == "BMC: Automation") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+
+igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing") %>% dplyr::filter(Category == "BMC: Automation") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price) %>% dplyr::select(Charge.Name.Short) %>% table()
 ```
 
 # Data Visualizations
@@ -337,39 +441,23 @@ sponsor_colors <- c(
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 ```
 
-### ???
-
-Rules
+## Sample isolation, purification, and initial processing
 
 ```{r}
-train.1 <- igt.final %>% dplyr::filter(str_detect(Usage.Type, "Assisted|Training|Unattended"))
-cat("Rows train1:", dim(train.1)[1], "\n")
-train.2 <- igt.final %>% dplyr::filter(Usage.Type == "N/A" & Category == "SEM/FIB/Airyscan charges")
-cat("Rows train2:", dim(train.2)[1], "\n")
-train.3 <- igt.final %>% dplyr::filter(Usage.Type == "N/A" & Category == "Technical Time" & str_detect(Charge.Name, "Training"))
-cat("Rows train3:", dim(train.3)[1], "\n")
-train.4 <- igt.final %>% dplyr::filter(Usage.Type == "N/A" & 
-                                          Category == "TEM/Cryo-TEM charges" & 
-                                          !str_detect(Charge.Name, "Cryoplunging") & 
-                                          !str_detect(Charge.Name, regex("Sample",ignore_case = TRUE)))
-cat("Rows train4:", dim(train.4)[1], "\n")
+samp <- igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing")
+cat("Rows samp:", dim(samp)[1], "\n")
+table(samp$Charge.Name.Short,samp$Unit.of.Measure)
 ```
 
-#### Combine the ? objects
+### Prepare Sample isolation, purification, and initial processing pie chart
 
 ```{r}
-train <- rbind(train.1,train.2,train.3,train.4)
-```
-
-### Prepare ? pie chart
-
-```{r}
-train.pie <- train %>%
+samp.pie <- samp %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(Total.Price), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[DSMI_IGT_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
             .groups = "drop") %>%
   mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
@@ -386,32 +474,156 @@ train.pie <- train %>%
             color = "white") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "???",
+  labs(title = "Sample isolation, purification, and initial processing units",
        fill = "Sponsor") +
   theme_void() +
   theme(legend.position = "right")
 
-train.pie
+samp.pie
+```
+
+## Library preparation, automation, and quality control
+
+```{r}
+lib <- igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control")
+cat("Rows lib:", dim(lib)[1], "\n")
+table(lib$Charge.Name.Short,lib$Unit.of.Measure)
+```
+
+### Prepare Sample isolation, purification, and initial processing pie chart
+
+```{r}
+lib.pie <- lib %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Total.Price), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Library Preparation, Automation, and Quality Control ",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+lib.pie
+```
+
+## Single Cell and Spatial Omics
+
+```{r}
+spatial <- igt.final.annot %>% dplyr::filter(group == "Single Cell and Spatial ‘Omics")
+cat("Rows spatial:", dim(spatial)[1], "\n")
+table(spatial$Charge.Name.Short,spatial$Unit.of.Measure)
+```
+
+### Prepare Sample isolation, purification, and initial processing pie chart
+
+```{r}
+spatial.pie <- spatial %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Total.Price), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Single Cell and Spatial 'Omics Units",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+spatial.pie
+```
+
+## Sequencing and Oligonucleotide Synthesis
+
+```{r}
+seq <- igt.final.annot %>% dplyr::filter(group == "Sequencing and Oligonucleotide Synthesis")
+cat("Rows seq:", dim(seq)[1], "\n")
+table(seq$Charge.Name.Short,seq$Unit.of.Measure)
+```
+
+### Prepare Sample isolation, purification, and initial processing pie chart
+
+```{r}
+seq.pie <- seq %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(Total.Price), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3,
+            fontface = "bold",
+            color = "white") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Sequencing and Oligonucleotide Synthesis Units",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "right")
+
+seq.pie
 ```
 
 # Plot the pie charts figure
 
-```{r,fig.width=16,fig.height=4}
-trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
+```{r,fig.width=20,fig.height=4}
+samp.pie + lib.pie + spatial.pie + seq.pie + plot_layout(ncol = 4, guides = "collect")
 
-combo.pie <- trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
-ggsave("figures/IGT_combo.pie.pdf", 
-       plot = combo.pie, 
-       dpi = 150, 
-       width = 16, 
-       height = 4, 
+combo.pie <- samp.pie + lib.pie + spatial.pie + seq.pie + plot_layout(ncol = 4, guides = "collect")
+ggsave("figures/IGT_combo.pie.pdf",
+       plot = combo.pie,
+       dpi = 150,
+       width = 20,
+       height = 4,
        units = "in")
 ```
 
 # Write annotated output file
 
 ```{r}
-write.xlsx(igt.final,"igt.final.xlsx")
+# write.xlsx(igt.final,"igt.final.xlsx")
+# write.xlsx(igt.final.annot,"igt.final.annot.xlsx")
 ```
 
 # write session info

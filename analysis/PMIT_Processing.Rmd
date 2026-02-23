@@ -185,11 +185,11 @@ sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 
 ### Instrument Use: Assisted or Training
 
-Include usage.type that includes “Assisted", “Consultation”, or “Training” (n=1854)
-Exclude usage.type that includes “Assisted Data Analysis” (n=31)
-Include usage.type = N/A and Category = “CFT Services” (n=58)
-Include usage.type = N/A and Category = “PET consumables and time" and Unit.of.Measure = hours (n=291)
-Include usage.type = N/A and Category = “PET consumables and time" and Unit.of.Measure = sample (n=34), count = sum of quantity/100
+1. Include usage.type that includes “Assisted", “Consultation”, or “Training” (n=1854)
+1. Exclude usage.type that includes “Assisted Data Analysis” (n=31)
+1. Include usage.type = N/A and Category = “CFT Services” (n=58)
+1. Include usage.type = N/A and Category = “PET consumables and time" and Unit.of.Measure = hours (n=291)
+1. Include usage.type = N/A and Category = “PET consumables and time" and Unit.of.Measure = sample (n=34), count = sum of quantity/100
 
 
 ```{r}
@@ -246,8 +246,8 @@ train.pie
 
 ### Instrument Use: Trained
 
-Include usage.type that includes “Independent", or “Trained” (n=16844)
-Include usage.type = N/A and Category = “Equipment Usage” (n=92)
+1. Include usage.type that includes “Independent", or “Trained” (n=16844)
+1. Include usage.type = N/A and Category = “Equipment Usage” (n=92)
 
 ```{r}
 use.1 <- ilabs.pmit %>% dplyr::filter(str_detect(Usage.Type, "Independent|Trained")) %>% dplyr::filter(!Usage.Type == "Assisted Data Analysis")
@@ -296,98 +296,145 @@ use.pie
 ```
 
 ## Modeling Services
-Include usage.type = N/A and Category = “Cell Testing Services" and Unit.of.Measure = Sample (n=585) - avg chg per unit = $40.60
-Include usage.type = N/A and Category = “ES Cell Culture" and Unit.of.Measure = Each or Set (n=62) - avg chg per unit = $360.04
-Include usage.type = N/A and Category = “Gene Targeting in ES Cells" (n=13) - avg chg per unit = $3062.79
-Include usage.type = N/A and Category = “Microinjection" (n=38) - avg chg per unit = $341.92
-Include usage.type = N/A and Category = “Request Cells" (n=315) - avg chg per unit = $137.96
-Include usage.type = N/A and Category = (Blanks) (n=13) - avg chg per unit = $25
-Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Assisted Work” n=315) - avg chg per unit = $133.80
-Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Monthly Charge” (n=30) - avg chg per unit = $927.40
-Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Consultation” and Core.Name contains “ES Cell” or “Modeling” (n=34) - avg chg per unit = $203.23
-Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Training” and Core.Name contains “ES Cell” or “Modeling” (n=23) - avg chg per unit = $126.96
+1. Include usage.type = N/A and Category = “Cell Testing Services" and Unit.of.Measure = Sample (n=585) - avg chg per unit = $40.60
+1. Include usage.type = N/A and Category = “ES Cell Culture" and Unit.of.Measure = Each or Set (n=62) - avg chg per unit = $360.04
+1. Include usage.type = N/A and Category = “Gene Targeting in ES Cells" (n=13) - avg chg per unit = $3062.79
+1. Include usage.type = N/A and Category = “Microinjection" (n=38) - avg chg per unit = $341.92
+1. Include usage.type = N/A and Category = “Request Cells" (n=315) - avg chg per unit = $137.96
+1. Include usage.type = N/A and Category = (Blanks) (n=13) - avg chg per unit = $25
+1. Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Assisted Work” n=315) - avg chg per unit = $133.80
+1. Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Monthly Charge” (n=30) - avg chg per unit = $927.40
+1. Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Consultation” and Core.Name contains “ES Cell” or “Modeling” (n=34) - avg chg per unit = $203.23
+1. Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Training” and Core.Name contains “ES Cell” or “Modeling” (n=23) - avg chg per unit = $126.96
 
 ```{r}
 model.serv.1 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                  Category == "Cell Testing Services" & 
                                                  Unit.of.Measure == "Sample")
 cat("Rows model.serv.1:", dim(model.serv.1)[1], "\n")
-model.serv.1.priceMean <- mean(model.serv.1$Price, na.rm = TRUE)
-cat("Mean model.serv.1:", model.serv.1.priceMean, "\n")
-model.serv.1 <- model.serv.1 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.1.priceMean,0))
+# model.serv.1.priceMean <- mean(model.serv.1$Price, na.rm = TRUE)
+# cat("Mean model.serv.1:", model.serv.1.priceMean, "\n")
+# model.serv.1 <- model.serv.1 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.1.priceMean,0))
 
 model.serv.2 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                  Category == "ES Cell Culture" & 
                                                  Unit.of.Measure %in% c("each","set"))
 cat("Rows model.serv.2:", dim(model.serv.2)[1], "\n")
-model.serv.2.priceMean <- mean(model.serv.2$Price, na.rm = TRUE)
-cat("Mean model.serv.3:", model.serv.2.priceMean, "\n")
-model.serv.2 <- model.serv.2 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.2.priceMean,0))
+# model.serv.2.priceMean <- mean(model.serv.2$Price, na.rm = TRUE)
+# cat("Mean model.serv.3:", model.serv.2.priceMean, "\n")
+# model.serv.2 <- model.serv.2 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.2.priceMean,0))
 
 model.serv.3 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                  Category == "Gene Targeting in ES cells")
 cat("Rows model.serv.3:", dim(model.serv.3)[1], "\n")
-model.serv.3.priceMean <- mean(model.serv.3$Price, na.rm = TRUE)
-cat("Mean model.serv.3:", model.serv.3.priceMean, "\n")
-model.serv.3 <- model.serv.3 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.3.priceMean,0))
+# model.serv.3.priceMean <- mean(model.serv.3$Price, na.rm = TRUE)
+# cat("Mean model.serv.3:", model.serv.3.priceMean, "\n")
+# model.serv.3 <- model.serv.3 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.3.priceMean,0))
 
 model.serv.4 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                  Category == "Microinjection")
 cat("Rows model.serv.4:", dim(model.serv.4)[1], "\n")
-model.serv.4.priceMean <- mean(model.serv.4$Price, na.rm = TRUE)
-cat("Mean model.serv.4:", model.serv.4.priceMean, "\n")
-model.serv.4 <- model.serv.4 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.4.priceMean,0))
+# model.serv.4.priceMean <- mean(model.serv.4$Price, na.rm = TRUE)
+# cat("Mean model.serv.4:", model.serv.4.priceMean, "\n")
+# model.serv.4 <- model.serv.4 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.4.priceMean,0))
 
 model.serv.5 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                  Category == "Request Cells")
 cat("Rows model.serv.5:", dim(model.serv.5)[1], "\n")
-model.serv.5.priceMean <- mean(model.serv.5$Price, na.rm = TRUE)
-cat("Mean model.serv.5:", model.serv.5.priceMean, "\n")
-model.serv.5 <- model.serv.5 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.5.priceMean,0))
+# model.serv.5.priceMean <- mean(model.serv.5$Price, na.rm = TRUE)
+# cat("Mean model.serv.5:", model.serv.5.priceMean, "\n")
+# model.serv.5 <- model.serv.5 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.5.priceMean,0))
 
 model.serv.6 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                  Category == "")
 cat("Rows model.serv.6:", dim(model.serv.6)[1], "\n")
-model.serv.6.priceMean <- mean(model.serv.6$Price, na.rm = TRUE)
-cat("Mean model.serv.6:", model.serv.6.priceMean, "\n")
-model.serv.6 <- model.serv.6 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.6.priceMean,0))
+# model.serv.6.priceMean <- mean(model.serv.6$Price, na.rm = TRUE)
+# cat("Mean model.serv.6:", model.serv.6.priceMean, "\n")
+# model.serv.6 <- model.serv.6 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.6.priceMean,0))
 
 model.serv.7 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                Category == "Hourly Services" & 
                                                Charge.Name == "Assisted Work")
 cat("Rows model.serv.7:", dim(model.serv.7)[1], "\n")
-model.serv.7.priceMean <- mean(model.serv.7$Price, na.rm = TRUE)
-cat("Mean model.serv.7:", model.serv.7.priceMean, "\n")
-model.serv.7 <- model.serv.7 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.7.priceMean,0))
+# model.serv.7.priceMean <- mean(model.serv.7$Price, na.rm = TRUE)
+# cat("Mean model.serv.7:", model.serv.7.priceMean, "\n")
+# model.serv.7 <- model.serv.7 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.7.priceMean,0))
 
 model.serv.8 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                Category == "Hourly Services" & 
                                                str_detect(Charge.Name,"Monthly Charge"))
 cat("Rows model.serv.8:", dim(model.serv.8)[1], "\n")
-model.serv.8.priceMean <- mean(model.serv.8$Price, na.rm = TRUE)
-cat("Mean model.serv.8:", model.serv.8.priceMean, "\n")
-model.serv.8 <- model.serv.8 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.8.priceMean,0))
+# model.serv.8.priceMean <- mean(model.serv.8$Price, na.rm = TRUE)
+# cat("Mean model.serv.8:", model.serv.8.priceMean, "\n")
+# model.serv.8 <- model.serv.8 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.8.priceMean,0))
 
 model.serv.9 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                Category == "Hourly Services" & 
                                                str_detect(Charge.Name,"Consultation") &
                                                str_detect(Core.Name, "ES|Modeling"))
 cat("Rows model.serv.9:", dim(model.serv.9)[1], "\n")
-model.serv.9.priceMean <- mean(model.serv.9$Price, na.rm = TRUE)
-cat("Mean model.serv.9:", model.serv.9.priceMean, "\n")
-model.serv.9 <- model.serv.9 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.9.priceMean,0))
+# model.serv.9.priceMean <- mean(model.serv.9$Price, na.rm = TRUE)
+# cat("Mean model.serv.9:", model.serv.9.priceMean, "\n")
+# model.serv.9 <- model.serv.9 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.9.priceMean,0))
 
 model.serv.10 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & 
                                                  Category == "Hourly Services" & 
                                                 Charge.Name == "Training" & 
                                                 str_detect(Core.Name, "ES|Modeling"))
 cat("Rows model.serv.10:", dim(model.serv.10)[1], "\n")
-model.serv.10.priceMean <- mean(model.serv.10$Price, na.rm = TRUE)
-cat("Mean model.serv.10:", model.serv.10.priceMean, "\n")
-model.serv.10 <- model.serv.10 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.10.priceMean,0))
+# model.serv.10.priceMean <- mean(model.serv.10$Price, na.rm = TRUE)
+# cat("Mean model.serv.10:", model.serv.10.priceMean, "\n")
+# model.serv.10 <- model.serv.10 %>% dplyr::mutate(Quantity.Norm = round(Quantity * model.serv.10.priceMean,0))
 ```
 
-#### Combine the model.serv objects
+### Rate Modifiers
+
+#### Function modify rates based on sponsorship categories
+
+```{r}
+modifyRates <- function(df, modifiers) {
+  df %>%
+    mutate(Price = Price * modifiers[PMIT_Sponsor])
+}
+```
+
+### Apply the function to the model.serv dataframes
+
+Note: Modifiers can be adjusted differently for the different selection groups
+
+```{r}
+model.serv.1 <- modifyRates(model.serv.1, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.1 <- model.serv.1 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.2 <- modifyRates(model.serv.2, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.2 <- model.serv.2 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.3 <- modifyRates(model.serv.3, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.3 <- model.serv.3 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.4 <- modifyRates(model.serv.4, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.4 <- model.serv.4 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.5 <- modifyRates(model.serv.5, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.5 <- model.serv.5 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.6 <- modifyRates(model.serv.6, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.6 <- model.serv.6 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.7 <- modifyRates(model.serv.7, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.7 <- model.serv.7 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.8 <- modifyRates(model.serv.8, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.8 <- model.serv.8 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.9 <- modifyRates(model.serv.9, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.9 <- model.serv.9 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+
+model.serv.10 <- modifyRates(model.serv.10, c(KI_member=1,KI_affiliate=1,MIT_non_sponsor=0.75,external=0.6,industry=0.5))
+model.serv.10 <- model.serv.10 %>% dplyr::mutate(Quantity.Norm = round(Quantity * Price,0))
+```
+
+### Combine the model.serv objects
 
 ```{r}
 model.serv <- rbind(model.serv.1,model.serv.2,model.serv.3,
@@ -411,7 +458,7 @@ model.serv.pie <- model.serv %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
@@ -431,9 +478,9 @@ model.serv.pie
 
 ## Testing Services
 
-Include usage.type = N/A and Category = “Animals and Husbandry" and Unit.of.Measure = hour (n=794)
-Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Consultation” and Core.Name contains “Animal” (n=66)
-Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Training” and Core.Name contains “Animal” (n=23)
+1. Include usage.type = N/A and Category = “Animals and Husbandry" and Unit.of.Measure = hour (n=794)
+1. Include usage.type = N/A and Category = “Hourly Services" and Charge.Name contains “Consultation” and Core.Name contains “Animal” (n=66)
+1. Include usage.type = N/A and Category = “Hourly Services" and Charge.Name = “Training” and Core.Name contains “Animal” (n=23)
 
 ```{r}
 testing.serv.1 <- ilabs.pmit %>% dplyr::filter(Usage.Type == "N/A" & Category == "Animals and Husbandry" & Unit.of.Measure == "hour")
@@ -491,8 +538,8 @@ testing.serv.pie
 
 ## Data Analysis: Imaging and Testing
 
-Include usage.type that includes “Analysis” (n=43)
-Include usage.type = N/A and Category = “Hourly Services" and Charge.Name includes = “Analysis” (n=100)
+1. Include usage.type that includes “Analysis” (n=43)
+1. Include usage.type = N/A and Category = “Hourly Services" and Charge.Name includes = “Analysis” (n=100)
 
 ```{r}
 image.test.1 <- ilabs.pmit %>% dplyr::filter(str_detect(Usage.Type, "Analysis"))

@@ -100,9 +100,9 @@ For each core, there are 4 steps in the processing:
 ### IGT
 
 - [script](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/IGT_Processing.Rmd)
-- [report]()
+- [report](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/IGT_Processing.html)
 - [data_file](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/igt.final.xlsx)
-- [figure]()
+- [figure](https://bmc-data.mit.edu/BCC/cw.lab3/KI_core_usage/analysis/figures/IGT_combo.pie.pdf)
 
 ### PMIT
 
