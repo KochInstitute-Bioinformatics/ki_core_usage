@@ -358,71 +358,44 @@ igt.final.annot <- igt.final.annot %>%
 cat("Dimensions of igt.final.annot after joining annotations:", dim(igt.final.annot), "\n")
 ```
 
+#### Check for missing group annotations
+
+```{r}
+igt.final.annot %>% dplyr::filter(is.na(group))
+```
+
+#### Exclude Training rows in Usage.Type.ToExclude
+
+Sample isolation, purification, and initial processing	hour	relative.spent	Training
+Library Preparation, Automation, and Quality Control	hour	relative.spent	[TRAINING SESSION] OR [ASSISTED USE]
+
+```{r}
+cat("Dimensions of igt.final.annot before excluding:", dim(igt.final.annot), "\n")
+igt.final.annot <- igt.final.annot %>% 
+  dplyr::filter(!(group == "Sample isolation, purification, and initial processing" & Usage.Type == "Training"))
+cat("Dimensions of igt.final.annot after excluding:", dim(igt.final.annot), "\n")
+igt.final.annot <- igt.final.annot %>% 
+  dplyr::filter(!(group == "Library Preparation, Automation, and Quality Control" & Usage.Type %in% c("[TRAINING SESSION]","[ASSISTED USE]")))
+cat("Dimensions of igt.final.annot after 2nd exclude:", dim(igt.final.annot), "\n")
+```
+
 #### Check for misannotated data
 
 ```{r}
-table(igt.final.annot$group)
-```
+#table(igt.final.annot$group)
 
-#### Identify the Category values for things I have annotated as consumable
+## Identify the Category values for things I have annotated as consumable
+#igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::select(Category) %>% table()
 
-```{r}
-igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::select(Category) %>% table()
-```
-
-#### pull data for controversial annotations
-
-```{r}
-igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "10X Visium") %>% 
-  dplyr::select(Charge.Name.Short,Unit.of.Measure,Price)
-igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Assisted") %>% 
-  dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Illumina Library: RNA") %>% 
-  dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Single Cell Services") %>% 
-  dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-```
-
-#### Identify the Category values for things I have annotated as Sequencing and Oligonucleotide Synthesis
-
-```{r}
-igt.final.annot %>% dplyr::filter(group == "Sequencing and Oligonucleotide Synthesis") %>% dplyr::select(Category) %>% table()
-```
-
-#### pull data for controversial annotations
-
-```{r}
-igt.final.annot %>% dplyr::filter(group == "Sequencing and Oligonucleotide Synthesis") %>% dplyr::filter(Category == "Assisted") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-```
-
-#### Identify the Category values for things I have annotated as Sequencing and Oligonucleotide Synthesis
-
-```{r}
-igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::select(Category) %>% table()
-```
-
-#### pull data for controversial annotations
-
-```{r}
-igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::filter(Category == "Illumina Sequencing") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-
-igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::filter(Category == "Illumina Sequencing") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price) %>% dplyr::select(Charge.Name.Short) %>% table()
-
-igt.final.annot %>% dplyr::filter(group == "Library Preparation, Automation, and Quality Control") %>% dplyr::filter(Category == "PacBio Sequencing") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-```
-
-#### Identify the Category values for things I have annotated as Sequencing and Oligonucleotide Synthesis
-
-```{r}
-igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing") %>% dplyr::select(Category) %>% table()
-```
-
-#### pull data for controversial annotations
-
-```{r}
-igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing") %>% dplyr::filter(Category == "BMC: Automation") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-
-igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing") %>% dplyr::filter(Category == "BMC: Automation") %>% dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price) %>% dplyr::select(Charge.Name.Short) %>% table()
+## pull data for controversial annotations
+# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "10X Visium") %>% 
+#   dplyr::select(Charge.Name.Short,Unit.of.Measure,Price)
+# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Assisted") %>% 
+#   dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Illumina Library: RNA") %>% 
+#   dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Single Cell Services") %>% 
+#   dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
 ```
 
 # Data Visualizations
@@ -445,7 +418,7 @@ sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 
 ```{r}
 samp <- igt.final.annot %>% dplyr::filter(group == "Sample isolation, purification, and initial processing")
-cat("Rows samp:", dim(samp)[1], "\n")
+cat("Rows in sample:", dim(samp)[1], "\n")
 table(samp$Charge.Name.Short,samp$Unit.of.Measure)
 ```
 
@@ -455,7 +428,7 @@ table(samp$Charge.Name.Short,samp$Unit.of.Measure)
 samp.pie <- samp %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Total.Price), 
+  summarise(Quantity = sum(Quantity), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -496,7 +469,7 @@ table(lib$Charge.Name.Short,lib$Unit.of.Measure)
 lib.pie <- lib %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Total.Price), 
+  summarise(Quantity = sum(Quantity), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -578,7 +551,7 @@ table(seq$Charge.Name.Short,seq$Unit.of.Measure)
 seq.pie <- seq %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Total.Price), 
+  summarise(Quantity = sum(Quantity), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
