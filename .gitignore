@@ -9,6 +9,7 @@
 R/
 .local/
 .config/
+.Rproj.user/
 
 # Ignore html notebook files
 *.nb.html
