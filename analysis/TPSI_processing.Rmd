@@ -28,6 +28,9 @@ options(future.globals.maxSize = 8e10)
 
 # Optional: seed for reproducibility
 set.seed(42)
+
+# Clear knitr cache
+unlink("hts_Processing_cache", recursive = TRUE)
 ```
 
 ```{r}
@@ -161,85 +164,6 @@ ilabs.tpsi <- ilabs.tpsi %>%
   dplyr::left_join(sponsor.toPlot, by = c("Sponsor" = "Sponsor"))
 ```
 
-# Service Annotation
-
-This may be necessary to facilitate data type selections for plotting
-
-## Gather categrories and output data
-
-Information about what was done is stored in 2 columns: Service.Type and Charge.Name
-
-```{r}
-# ilabs.tpsi <- ilabs.tpsi %>%
-#   mutate(Service.Group.working = case_when(
-#     Core.Name == "Biopolymers & Proteomics Core" ~ Service.Type,
-#     Core.Name == "metpro" ~ Charge.Name,
-#     TRUE ~ NA_character_  # default for any other cases
-#   ))
-# 
-# cat("Dimensions of Service.Group.working dataframe:", dim(as.data.frame(table(ilabs.tpsi$Service.Group.working))), "\n")
-# 
-# msbp.Service.Group.working.df <- as.data.frame(table(ilabs.tpsi$Service.Group.working))
-# write.xlsx(msbp.Service.Group.working.df,file="msbp.Service.Group.working.df.xlsx")
-```
-
-## Import manually annotated service groups
-
-Manually annotate Service.Group based on data in Service.Group.working and import the results
-
-```{r}
-# msbp.Service.Groups <- read.xlsx("../data/msbp.Service.Group.Annotation.xlsx")
-```
-
-## Join Service.Group to ilabs.tpsi
-
-```{r}
-# ilabs.tpsi <- ilabs.tpsi %>%
-#   dplyr::left_join(
-#     msbp.Service.Groups %>% dplyr::select(Service.Group.working, Service.Group),
-#     by = "Service.Group.working"
-#   )
-```
-
-# Rate Modifiers
-
-This is being paused now - using consistent units (each and hours instead)
-
-## Import rate modifier data
-
-```{r}
-# rate.mod <- read.xlsx("../data/rateModifiers.xlsx")
-# rate.mod
-```
-
-## Join the 2 different rate modifiers to ilabs.tpsi using SponsorCategory
-
-This should be validated by looking for Customer.Lab values that have more than 1 rate.modifier
-
-```{r}
-# msbp.final <- msbp.final %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, BP_modifier),
-#     by = c("BioPol_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   left_join(
-#     rate.mod %>% select(SponsorCategory, metpro_modifier),
-#     by = c("MetPro_Sponsor" = "SponsorCategory")
-#   ) %>%
-#   mutate(rate.modifier = case_when(
-#     Core.Name == "Biopolymers & Proteomics Core" ~ BP_modifier,
-#     Core.Name == "metpro" ~ metpro_modifier,
-#     TRUE ~ NA_real_
-#   )) %>%
-#   select(-BP_modifier, -metpro_modifier)  # clean up temporary columns
-```
-
-## Create adjusted Total.Price values based on assigned rate.modifier values
-
-```{r}
-# msbp.final <- msbp.final %>% dplyr::mutate(Adjusted.Total.Price = Total.Price * rate.modifier)
-```
-
 # Data Visualizations
 
 ## Define Colors
@@ -247,9 +171,9 @@ This should be validated by looking for Customer.Lab values that have more than 
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "MIT_Sponsor" = "lightpink",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
 
 # Define order of sponsors for stacking (top to bottom)
@@ -275,7 +199,7 @@ dim(path)
 path.pie <- path %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -289,15 +213,18 @@ path.pie <- path %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Pathology Consultation Hours",
+  labs(title = "Pathology Consultation (hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 path.pie
 ```
@@ -326,7 +253,7 @@ table(instr$Usage.Type)
 instr.pie <- instr %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -340,15 +267,18 @@ instr.pie <- instr %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Instrument Use: Assisted and Training Hours",
+  labs(title = "Instrument Use: Assisted and Training\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 instr.pie
 ```
@@ -377,7 +307,7 @@ table(inst.train$Usage.Type)
 inst.train.pie <- inst.train %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -391,15 +321,18 @@ inst.train.pie <- inst.train %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Instrument Use: Trained Hours",
+  labs(title = "Instrument Use: Trained (hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 inst.train.pie
 ```
@@ -422,7 +355,7 @@ table(tiss$Unit.of.Measure)
 tiss.pie <- tiss %>%
     mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -436,29 +369,35 @@ tiss.pie <- tiss %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Tissue Processing Units",
+  labs(title = "Tissue Processing (units)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 tiss.pie
 ```
 
 # Plot the pie charts figure
 
-```{r,fig.width=16,fig.height=4}
-instr.pie + inst.train.pie + path.pie + tiss.pie + plot_layout(ncol = 4, guides = "collect")
+```{r,fig.width=14,fig.height=4}
+instr.pie + inst.train.pie + path.pie + tiss.pie + plot_layout(ncol = 4, guides = "collect") & 
+  theme(legend.position = "bottom")
 
-combo.pie <- instr.pie + inst.train.pie + path.pie + tiss.pie + plot_layout(ncol = 4, guides = "collect")
+combo.pie <- instr.pie + inst.train.pie + path.pie + tiss.pie + plot_layout(ncol = 4, guides = "collect") & 
+  theme(legend.position = "bottom")
+
 ggsave("figures/TPSI_combo.pie.pdf", 
        plot = combo.pie, 
-       dpi = 150, 
-       width = 20, 
+       dpi = 600, 
+       width = 14, 
        height = 4, 
        units = "in")
 ```

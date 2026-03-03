@@ -28,6 +28,9 @@ options(future.globals.maxSize = 8e10)
 
 # Optional: seed for reproducibility
 set.seed(42)
+
+# Clear knitr cache
+unlink("hts_Processing_cache", recursive = TRUE)
 ```
 
 ```{r}
@@ -149,10 +152,38 @@ ilabs.nano <- ilabs.nano %>%
   dplyr::left_join(sponsor.toPlot, by = c("NanoFIB_Sponsor" = "Sponsor"))
 ```
 
-# Service Annotation
+# Add rate modifiers and adjusted Total.price
 
-Exclude usage.type = unknown
-Exclude usage.type = N/A and Category = "DLS/Spectradyne charges"
+Create rate modifier dataframe
+
+```{r}
+rate_modifiers <- tibble(
+  NanoFIB_Sponsor = c("KI_member", "KI_affiliate", "MIT_sponsor", "MIT_non_sponsor", "external", "industry"),
+  RateModifier = c(1, 1, 1, 0.5, 0.5, 0.167)
+)
+```
+
+Join to ilabs.nano
+
+```{r}
+ilabs.nano <- ilabs.nano %>%
+  left_join(rate_modifiers,
+            by = "NanoFIB_Sponsor")
+```
+
+Check the join
+
+```{r}
+table(ilabs.nano$NanoFIB_Sponsor,ilabs.nano$RateModifier)
+```
+
+Calculate adjusted price column for pie charts
+
+```{r}
+ilabs.nano <- ilabs.nano %>% mutate(Adjusted.Total.Price = Total.Price * RateModifier)
+```
+
+# Service Annotation
 
 # Data Visualizations
 
@@ -161,9 +192,9 @@ Exclude usage.type = N/A and Category = "DLS/Spectradyne charges"
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "MIT_Sponsor" = "lightpink",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
 
 # Define order of sponsors for stacking (top to bottom)
@@ -206,7 +237,7 @@ train <- rbind(train.1,train.2,train.3,train.4)
 train.pie <- train %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[NanoFIB_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -220,15 +251,18 @@ train.pie <- train %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Instrument Use: Assisted or Training Hours",
+  labs(title = "Instrument Use: Assisted or Training\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 train.pie
 ```
@@ -254,7 +288,7 @@ as.data.frame(table(trained.use$Usage.Type))
 trained.use.pie <- trained.use %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[NanoFIB_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -268,15 +302,18 @@ trained.use.pie <- trained.use %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Instrument Use: Trained Hours",
+  labs(title = "Instrument Use: Trained\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 trained.use.pie
 ```
@@ -310,7 +347,7 @@ sample <- rbind(sample.1,sample.2,sample.3)
 sample.pie <- sample %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Adjusted.Total.Price,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[NanoFIB_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -319,34 +356,39 @@ sample.pie <- sample %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "EM Sample Preparation Units",
+  labs(title = "EM Sample Preparation\n(relative dollars)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 sample.pie
 ```
 
 # Plot the pie charts figure
 
-```{r,fig.width=16,fig.height=4}
-trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
+```{r,fig.width=11,fig.height=4}
+trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 
-combo.pie <- trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect")
+combo.pie <- trained.use.pie + train.pie + sample.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 ggsave("figures/NanoFIB_combo.pie.pdf", 
        plot = combo.pie, 
-       dpi = 150, 
-       width = 16, 
+       dpi = 600, 
+       width = 11, 
        height = 4, 
        units = "in")
 ```

@@ -20,10 +20,7 @@ knitr::opts_chunk$set(
   error = TRUE,
   cache = TRUE,
   cache.lazy = FALSE,
-  fig.retina = 2,
-  fig.width = 6,
-  fig.height = 6,
-  dpi = 300
+  fig.retina = 2
 )
 
 # For bioinformatics (Seurat, parallel)
@@ -31,6 +28,9 @@ options(future.globals.maxSize = 8e10)
 
 # Optional: seed for reproducibility
 set.seed(42)
+
+# Clear knitr cache
+unlink("PMIT_Processing_cache", recursive = TRUE)
 ```
 
 ```{r}
@@ -213,60 +213,32 @@ ilabs.flow <- ilabs.flow %>%
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
 
+
 # Define order of sponsors for stacking (top to bottom)
-sponsor_order <- c("Center_Member", "Non_Sponsor")
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
 ```
 
-## Subset the data for plotting
+## Instrument Use: Training (hours)
+1. Usage.Type contains “Training” or “training” (n=1887)
+
+### Select the data
 
 ```{r}
-flow.forBarchart <- ilabs.flow %>% dplyr::select(Category,Quantity,Sponsor_ForPlot)
+train <- ilabs.flow %>%dplyr::filter(str_detect(Usage.Type, "Training|training"))
 ```
 
-## Draw the combined barchart
-
-```{r,fig.width=8,fig.height=6}
-ilabs.flow %>%
-  filter(Category %in% c("Cell Sorting Equipment", "Analysis Machines", "Imaging Cytometry")) %>%
-  mutate(
-    Category_Label = factor(Category, 
-                            levels = c("Cell Sorting Equipment", "Analysis Machines", "Imaging Cytometry"),
-                            labels = c("Sorting", "Analysis", "Imaging Cytometry")),
-    Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)
-  ) %>%
-  group_by(Category_Label, Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), .groups = "drop") %>%
-  group_by(Category_Label) %>%
-  mutate(Total = sum(Quantity),
-         Percent = round((Quantity / Total) * 100, 0)) %>%
-  ungroup() %>%
-  ggplot(aes(x = Category_Label, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col(position = "dodge") +
-  geom_text(aes(label = paste0(Percent, "%")), 
-            position = position_dodge(width = 0.9),
-            vjust = -0.5,
-            size = 3) +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Equipment by Category and Sponsor",
-       x = "Category",
-       y = "Quantity (Hours)",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 0))
-```
-
-## Three separate barcharts
+### Prepare Instrument Use: Training (hours) pie chart
 
 ```{r}
-sort.bar <- ilabs.flow %>%
-  filter(Category == "Cell Sorting Equipment") %>%
+train.pie <- train %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -275,197 +247,179 @@ sort.bar <- ilabs.flow %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Sorting",
-       x = "Sponsor Group",
-       y = "Hours",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-analysis.bar <- ilabs.flow %>%
-  filter(Category == "Analysis Machines") %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Analysis",
-       x = "Sponsor Group",
-       y = "Hours",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-cyt.bar <- ilabs.flow %>%
-  filter(Category == "Imaging Cytometry") %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Imaging Cytometry",
-       x = "Sponsor Group",
-       y = "Hours",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-### Plot the bar separate charts
-
-```{r,fig.width=14,fig.height=6}
-sort.bar + analysis.bar + cyt.bar + plot_layout(ncol = 3, guides = "collect")
-
-combo.bar <- sort.bar + analysis.bar + cyt.bar + plot_layout(ncol = 3, guides = "collect")
-ggsave("figures/Flow_combo.bar.pdf", 
-       plot = combo.bar, 
-       dpi = 150, 
-       width = 14, 
-       height = 6, 
-       units = "in")
-```
-
-## Pie chart versions
-
-```{r}
-sort.pie <- ilabs.flow %>%
-  filter(Category == "Cell Sorting Equipment") %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, " hours\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Sorting",
+  labs(title = "Training (hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
-analysis.pie <- ilabs.flow %>%
-  filter(Category == "Analysis Machines") %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, " hours\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            position = position_stack(vjust = 0.5),
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  coord_polar("y", start = 0) +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Analysis",
-       fill = "Sponsor") +
-  theme_void() +
-  theme(legend.position = "right")
-
-cyt.pie <- ilabs.flow %>%
-  filter(Category == "Imaging Cytometry") %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, " hours\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            position = position_stack(vjust = 0.5),
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  coord_polar("y", start = 0) +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Imaging Cytometry",
-       fill = "Sponsor") +
-  theme_void() +
-  theme(legend.position = "right")
+train.pie
 ```
 
-### Plot the pie charts
+## Instrument Use: Trained- Sorting (hours)
+1. Usage.Type does not contain “Training” or “training”
+1. Category = “Cell Sorting Equipment" (n=12194)
 
-```{r,fig.width=14,fig.height=5}
-sort.pie + analysis.pie + cyt.pie + plot_layout(ncol = 3, guides = "collect")
+### Select the data
 
-combo.pie <- sort.pie + analysis.pie + cyt.pie + plot_layout(ncol = 3, guides = "collect")
-ggsave("figures/Flow_combo.pie.pdf", 
-       plot = combo.pie, 
-       dpi = 150, 
-       width = 14, 
-       height = 5, 
+```{r}
+sort <- ilabs.flow %>% dplyr::filter(Category == "Cell Sorting Equipment") %>%
+  dplyr::filter(!str_detect(Usage.Type, "Training|training"))
+```
+
+### Prepare Instrument Use: Trained- Sorting (hours) pie chart
+
+```{r}
+sort.pie <- sort %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Sorting (hours)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+sort.pie
+```
+
+## Instrument Use: Trained- Analysis (hours)
+1. Usage.Type does not contain “Training” or “training”
+1. Category = “Analysis Machines" (n=37338)
+
+### Select the data
+
+```{r}
+trained.analysis <- ilabs.flow %>% dplyr::filter(Category == "Analysis Machines") %>%
+  dplyr::filter(!str_detect(Usage.Type, "Training|training"))
+```
+
+### Prepare Instrument Use: Trained- Sorting (hours) pie chart
+
+```{r}
+trained.analysis.pie <- trained.analysis %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Trained - Sorting (hours)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+trained.analysis.pie
+```
+
+## Instrument Use: Trained- Imaging Cytometry (hours)
+1. Usage.Type does not contain “Training” or “training”
+1. Category = “Imaging Cytometry" (n=290)
+
+```{r}
+cytometry <- ilabs.flow %>% dplyr::filter(Category == "Imaging Cytometry") %>%
+  dplyr::filter(!str_detect(Usage.Type, "Training|training"))
+```
+
+### Prepare Instrument Use: Trained- Imaging Cytometry (hours) pie chart
+
+```{r}
+cytometry.pie <- cytometry %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[Flow_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Trained - Imaging Cytometry (hours)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+cytometry.pie
+```
+
+# Plot the pie charts figure
+
+```{r,fig.width=14,fig.height=4}
+train.pie + sort.pie + trained.analysis.pie + cytometry.pie + plot_layout(ncol = 4, guides = "collect") & 
+  theme(legend.position = "bottom")
+
+combo.pie <- train.pie + sort.pie + trained.analysis.pie + cytometry.pie + plot_layout(ncol = 4, guides = "collect") & 
+  theme(legend.position = "bottom")
+ggsave("figures/FLOW_combo.pie.pdf",
+       plot = combo.pie,
+       dpi = 600,
+       width = 14,
+       height = 4,
        units = "in")
 ```
 

@@ -238,9 +238,9 @@ Manually annotate Service.Group based on data in Service.Group.working and impor
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "MIT_Sponsor" = "lightpink",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
 
 # Define order of sponsors for stacking (top to bottom)
@@ -262,7 +262,7 @@ cat("Rows train:", dim(train)[1], "\n")
 train.pie <- train %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[HTS_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -276,15 +276,18 @@ train.pie <- train %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
   labs(title = "Instrument Use: Training (hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 train.pie
 ```
@@ -304,7 +307,7 @@ cat("Rows instr:", dim(instr)[1], "\n")
 instr.pie <- instr %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[HTS_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -318,15 +321,18 @@ instr.pie <- instr %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
   labs(title = "Instrument Use: Trained (hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 instr.pie
 ```
@@ -361,7 +367,7 @@ assist <- rbind(assist.1,assist.2,assist.3)
 assist.pie <- assist %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[HTS_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -375,29 +381,34 @@ assist.pie <- assist %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
   labs(title = "Staff Assisted (hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 assist.pie
 ```
 
 # Plot the pie charts figure
 
-```{r,fig.width=16,fig.height=4}
-train.pie + instr.pie + assist.pie + plot_layout(ncol = 3, guides = "collect")
+```{r,fig.width=11,fig.height=4}
+train.pie + instr.pie + assist.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 
-combo.pie <- train.pie + instr.pie + assist.pie + plot_layout(ncol = 3, guides = "collect")
+combo.pie <- train.pie + instr.pie + assist.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 ggsave("figures/HTS_combo.pie.pdf", 
        plot = combo.pie, 
-       dpi = 150, 
-       width = 16, 
+       dpi = 600, 
+       width = 11, 
        height = 4, 
        units = "in")
 ```

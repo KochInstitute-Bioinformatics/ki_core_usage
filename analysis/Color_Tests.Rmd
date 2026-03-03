@@ -1,0 +1,393 @@
+---
+title: "Color Pallete examples based on DSMI"
+author: "Charlie Whittaker"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+  html_notebook: default
+date: "3/3/2026"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = TRUE,
+  warning = TRUE,
+  error = TRUE,
+  cache = TRUE,
+  cache.lazy = FALSE,
+  fig.retina = 2
+)
+
+# For bioinformatics (Seurat, parallel)
+options(future.globals.maxSize = 8e10)
+
+# Optional: seed for reproducibility
+set.seed(42)
+
+# Clear knitr cache
+unlink("hts_Processing_cache", recursive = TRUE)
+```
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(purrr)
+library(knitr)
+library(lubridate)
+library(patchwork)
+```
+
+# Data Import
+
+```{r}
+dsmi.final <- read.xlsx("dsmi.final.xlsx")
+```
+
+# Training Data
+
+## Extract the data from the main dataframe
+
+```{r}
+train <- dsmi.final %>% dplyr::filter(Category == "Training")
+dim(train)
+old.train <- dsmi.final %>% dplyr::filter(Category == "Hours of Service " & Charge.Name == "Training Session")
+dim(old.train)
+train <- rbind(train,old.train)
+dim(train)
+```
+
+# Color Pallete examples
+
+## Current example
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+### Current colors pie chart
+
+```{r}
+current.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "current\n(attendees)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+current.pie
+```
+
+## sarah picks
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "#CB674C",
+  "MIT_Sponsor" = "#6C95B0", 
+  "Non_Sponsor" = "#DBD7D3"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+### sarah picks pie
+
+```{r}
+sarah.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "Sarah Picks\n(attendees)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+sarah.pie
+```
+
+## colorblind safe example 1
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "#0173B2",
+  "MIT_Sponsor" = "#DE8F05", 
+  "Non_Sponsor" = "#029E73"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+### colorblind safe example 1
+
+```{r}
+cb1.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "CBsafe 1\n(attendees)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+cb1.pie
+```
+
+## colorblind safe example 2
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "#0173B2",
+  "MIT_Sponsor" = "#DE8F05", 
+  "Non_Sponsor" = "#CC78BC"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+### colorblind safe example 2
+
+```{r}
+cb2.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "CBsafe 2\n(attendees)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+cb2.pie
+```
+
+## colorblind safe example 3
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "#56B4E9",
+  "MIT_Sponsor" = "#E69F00", 
+  "Non_Sponsor" = "#009E73"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+### colorblind safe example 3
+
+```{r}
+cb3.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "CBsafe 3\n(gold standard according to LLM)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+cb3.pie
+```
+
+## colorblind safe example 4
+
+```{r}
+# Define colors for each Sponsor (adjust these hex codes as needed)
+sponsor_colors <- c(
+  "Center_Member" = "#66C2A5",
+  "MIT_Sponsor" = "#FC8D62", 
+  "Non_Sponsor" = "#8DA0CB"
+)
+
+# Define order of sponsors for stacking (top to bottom)
+sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
+```
+
+### colorblind safe example 4
+
+```{r}
+cb4.pie <- train %>%
+  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
+  group_by(Sponsor_ForPlot) %>%
+  summarise(Quantity = sum(round(Quantity,0)), 
+            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
+                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
+                               n_distinct(Faculty.Key)),
+            .groups = "drop") %>%
+  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
+         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
+                             paste0(Num_Labs, " Members"),
+                             paste0(Num_Labs, " Users")),
+         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
+  ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
+  geom_col() +
+  geom_text(aes(label = Label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.6,
+            fontface = "bold",
+            color = "black") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = sponsor_colors) +
+  labs(title = "CBsafe 4\n(attendees)",
+       fill = "Sponsor") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+
+cb4.pie
+```
+
+# Plot the pie charts figure
+
+```{r,fig.width=8,fig.height=12}
+current.pie + sarah.pie + cb1.pie + cb2.pie + cb3.pie + cb4.pie + plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "bottom")
+
+
+combo.pie <- current.pie + sarah.pie + cb1.pie + cb2.pie + cb3.pie + cb4.pie + plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "bottom")
+
+ggsave("figures/ColorTest.pie.pdf", 
+       plot = combo.pie, 
+       dpi = 600, 
+       width = 8, 
+       height = 12, 
+       units = "in")
+```
+
+# write session info
+
+Capturing information about the R session helps document your work
+
+```{r}
+sessionInfo()
+writeLines(capture.output(sessionInfo()), "Color_Tests_sessionInfo.txt")
+```

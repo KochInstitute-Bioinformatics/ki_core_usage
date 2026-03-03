@@ -28,6 +28,9 @@ options(future.globals.maxSize = 8e10)
 
 # Optional: seed for reproducibility
 set.seed(42)
+
+# Clear knitr cache
+unlink("hts_Processing_cache", recursive = TRUE)
 ```
 
 ```{r}
@@ -141,6 +144,7 @@ bmc.ext.dsmi <- bmc.ext.dsmi %>% dplyr::mutate(Core.Name = "bmc.ext")
 bmc.ext.dsmi <- bmc.ext.dsmi %>% dplyr::mutate(Center = "")
 bmc.ext.dsmi <- bmc.ext.dsmi %>% dplyr::mutate(Usage.Type = "")
 bmc.ext.dsmi <- bmc.ext.dsmi %>% dplyr::mutate(Notes = "")
+bmc.ext.dsmi <- bmc.ext.dsmi %>% dplyr::mutate(Charge.ID = "")
 ```
 
 #### Select ilabs columns from bmc.ext.dsmi
@@ -149,7 +153,7 @@ bmc.ext.dsmi <- bmc.ext.dsmi %>% dplyr::mutate(Notes = "")
 bmc.ext.dsmi.to_rbind <- bmc.ext.dsmi %>%
   dplyr::select(Service.ID, Service.Type, Customer.Name, Customer.Lab, Customer.Department, 
                 Customer.Institute, Charge.Name, Notes, Unit.of.Measure, Quantity, Price, 
-                Total.Price, Price.Type, Purchase.Date, Core.Name, Center, Category, 
+                Total.Price, Price.Type, Purchase.Date, Core.Name, Charge.ID, Center, Category, 
                 Usage.Type)
 ```
 
@@ -344,9 +348,9 @@ This should be validated by looking for Customer.Lab values that have more than 
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "MIT_Sponsor" = "lightpink",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
 
 # Define order of sponsors for stacking (top to bottom)
@@ -372,48 +376,13 @@ dim(train)
 head(train)
 ```
 
-### Prepare Training bar chart
-
-```{r,fig.width=5,fig.height=6}
-train.bar <- train %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Training",
-       x = "Sponsor Group",
-       y = "Sessions Attended",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-train.bar
-```
-
-### Prepare proteomics pie chart
+### Prepare training pie chart
 
 ```{r}
 train.pie <- train %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -422,20 +391,23 @@ train.pie <- train %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Training Sessions Attended",
+  labs(title = "Training Sessions\n(attendees)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 train.pie
 ```
@@ -562,39 +534,25 @@ dim(hours.dmac)
 dim(hours.project)
 ```
 
-### Prepare Project Hours bar chart
+### Add hours for Anderson Scott's work
 
-```{r,fig.width=5,fig.height=6}
-proj.hours.bar <- hours.project %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Project Hours",
-       x = "Sponsor Group",
-       y = "Hours",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
+Import the data exported from PMIT
 
-proj.hours.bar
+```{r}
+as.hours <- read.xlsx("AS_hours_toDSMI.xlsx")
+```
+
+Make repairs prior to merge
+
+```{r}
+as.hours <- as.hours %>% rename(IGT_DSMI_Sponsor = PMIT_Sponsor)
+as.hours <- as.hours %>% dplyr::select(-Charge.Name.Short)
+```
+
+Add Anderson's hours to the hours.project
+
+```{r}
+hours.project <- rbind(hours.project,as.hours)
 ```
 
 ### Prepare project hours pie chart
@@ -603,7 +561,7 @@ proj.hours.bar
 proj.hours.pie <- hours.project %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -617,52 +575,20 @@ proj.hours.pie <- hours.project %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Project Hours",
+  labs(title = "Data Analysis\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
-
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
+  
 proj.hours.pie
-```
-
-### Prepare DMAC Hours bar chart
-
-```{r,fig.width=5,fig.height=6}
-dmac.hours.bar <- hours.dmac %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Data Management Hours",
-       x = "Sponsor Group",
-       y = "Hours",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-dmac.hours.bar
 ```
 
 ### Prepare project hours pie chart
@@ -671,7 +597,7 @@ dmac.hours.bar
 dmac.hours.pie <- hours.dmac %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -685,15 +611,18 @@ dmac.hours.pie <- hours.dmac %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Data Management Hours",
+  labs(title = "Data Management\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 dmac.hours.pie
 ```
@@ -701,14 +630,18 @@ dmac.hours.pie
 # Plot the pie charts figure
 
 
-```{r,fig.width=16,fig.height=4}
-train.pie + proj.hours.pie + dmac.hours.pie + plot_layout(ncol = 3, guides = "collect")
+```{r,fig.width=11,fig.height=4}
+train.pie + proj.hours.pie + dmac.hours.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 
-combo.pie <- train.pie + proj.hours.pie + dmac.hours.pie + plot_layout(ncol = 3, guides = "collect")
+
+combo.pie <- train.pie + proj.hours.pie + dmac.hours.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
+
 ggsave("figures/DSMI_combo.pie.pdf", 
        plot = combo.pie, 
-       dpi = 150, 
-       width = 16, 
+       dpi = 600, 
+       width = 11, 
        height = 4, 
        units = "in")
 ```

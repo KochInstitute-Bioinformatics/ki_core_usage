@@ -174,10 +174,11 @@ as.data.frame(table(ilabs.pmit$Charge.Name.Short)) %>% arrange(desc(Freq))
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "MIT_Sponsor" = "lightpink",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
+
 
 # Define order of sponsors for stacking (top to bottom)
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
@@ -217,7 +218,7 @@ train <- rbind(train.1,train.2,train.3,train.4)
 train.pie <- train %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -231,15 +232,18 @@ train.pie <- train %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Instrument Use: Assisted or Training Hours",
+  labs(title = "Instrument Use: Assisted or Training\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 train.pie
 ```
@@ -268,7 +272,7 @@ use <- rbind(use.1,use.2)
 use.pie <- use %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -282,15 +286,18 @@ use.pie <- use %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Instrument Use: Trained Hours",
+  labs(title = "Instrument Use: Trained\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 use.pie
 ```
@@ -449,7 +456,7 @@ model.serv <- rbind(model.serv.1,model.serv.2,model.serv.3,
 model.serv.pie <- model.serv %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity.Norm), 
+  summarise(Quantity = sum(round(Quantity.Norm,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -463,15 +470,18 @@ model.serv.pie <- model.serv %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Modeling Services Normalized Charges",
+  labs(title = "Modeling Services\n(normalized charges)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 model.serv.pie
 ```
@@ -509,7 +519,7 @@ testing.serv <- rbind(testing.serv.1,testing.serv.2,testing.serv.3)
 testing.serv.pie <- testing.serv %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -523,15 +533,18 @@ testing.serv.pie <- testing.serv %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Testing Services Hours",
+  labs(title = "Testing Services\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 testing.serv.pie
 ```
@@ -552,7 +565,9 @@ cat("Rows image.test.2:", dim(image.test.2)[1], "\n")
 
 ```{r}
 image.test <- rbind(image.test.1,image.test.2)
-write.xlsx(image.test, file="pmit_DataAnalysisImageTesting.xlsx")
+as.hours <- image.test %>% dplyr::filter(str_detect(Notes, "AS"))
+write.xlsx(as.hours, file="AS_hours_toDSMI.xlsx")
+image.test <- image.test %>% dplyr::filter(!str_detect(Notes, "AS"))
 ```
 
 ### Prepare Data Analysis: Imaging and Testing pie chart
@@ -561,7 +576,7 @@ write.xlsx(image.test, file="pmit_DataAnalysisImageTesting.xlsx")
 image.test.pie <- image.test %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[PMIT_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -575,30 +590,35 @@ image.test.pie <- image.test %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Data Analysis: Imaging and Testing Hours",
+  labs(title = "Data Analysis: Imaging and Testing\n(hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 image.test.pie
 ```
 
 # Plot the pie charts figure
 
-```{r,fig.width=25,fig.height=4}
-model.serv.pie + train.pie + use.pie + testing.serv.pie + image.test.pie + plot_layout(ncol = 5, guides = "collect")
+```{r,fig.width=10,fig.height=7}
+model.serv.pie + train.pie + use.pie + testing.serv.pie + image.test.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 
-combo.pie <- model.serv.pie + train.pie + use.pie + testing.serv.pie + image.test.pie + plot_layout(ncol = 5, guides = "collect")
+combo.pie <- model.serv.pie + train.pie + use.pie + testing.serv.pie + image.test.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 ggsave("figures/PMIT_combo.pie.pdf", 
        plot = combo.pie, 
-       dpi = 150, 
-       width = 25, 
-       height = 4, 
+       dpi = 600, 
+       width = 10, 
+       height = 7, 
        units = "in")
 ```
 

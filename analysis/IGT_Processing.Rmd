@@ -179,6 +179,7 @@ bmc.ext.igt <- bmc.ext.igt %>% dplyr::mutate(Core.Name = "bmc.ext")
 bmc.ext.igt <- bmc.ext.igt %>% dplyr::mutate(Center = "")
 bmc.ext.igt <- bmc.ext.igt %>% dplyr::mutate(Usage.Type = "")
 bmc.ext.igt <- bmc.ext.igt %>% dplyr::mutate(Notes = "")
+bmc.ext.igt <- bmc.ext.igt %>% dplyr::mutate(Charge.ID = "")
 ```
 
 #### Select ilabs columns from bmc.ext.igt
@@ -187,7 +188,7 @@ bmc.ext.igt <- bmc.ext.igt %>% dplyr::mutate(Notes = "")
 bmc.ext.igt.to_rbind <- bmc.ext.igt %>%
   dplyr::select(Service.ID, Service.Type, Customer.Name, Customer.Lab, Customer.Department, 
                 Customer.Institute, Charge.Name, Notes, Unit.of.Measure, Quantity, Price, 
-                Total.Price, Price.Type, Purchase.Date, Core.Name, Center, Category, 
+                Total.Price, Price.Type, Purchase.Date, Core.Name, Charge.ID, Center, Category, 
                 Usage.Type)
 ```
 
@@ -345,11 +346,13 @@ Charge.Name.Short.table.annot <- read.xlsx("ChargeNameShortTable_annotated.xlsx"
 
 ### Join Charge.Name.Short annotations to igt.final
 
-#### Make a copy of igt.final so it is easier to restart
+Make a copy of igt.final so it is easier to restart
 
 ```{r}
 igt.final.annot <- igt.final
 ```
+
+Complete the join
 
 ```{r}
 cat("Dimensions of igt.final.annot before joining annotations:", dim(igt.final.annot), "\n")
@@ -379,23 +382,104 @@ igt.final.annot <- igt.final.annot %>%
 cat("Dimensions of igt.final.annot after 2nd exclude:", dim(igt.final.annot), "\n")
 ```
 
-#### Check for misannotated data
+#### Incorporate Stuart's manual annotations
+
+Split igt.final.annot into 2 groups, one without meaningful group annotation, one with
 
 ```{r}
-#table(igt.final.annot$group)
+rows.NoGroup <- igt.final.annot %>% dplyr::filter(group == "assistance")
+rows.WithGroup <- igt.final.annot %>% dplyr::filter(group != "assistance")
+```
 
-## Identify the Category values for things I have annotated as consumable
-#igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::select(Category) %>% table()
+Add a temporary key to transfer data
 
-## pull data for controversial annotations
-# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "10X Visium") %>% 
-#   dplyr::select(Charge.Name.Short,Unit.of.Measure,Price)
-# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Assisted") %>% 
-#   dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Illumina Library: RNA") %>% 
-#   dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
-# igt.final.annot %>% dplyr::filter(group == "consumable") %>% dplyr::filter(Category == "Single Cell Services") %>% 
-#   dplyr::select(Charge.Name.Short,Category,Unit.of.Measure,Price)
+```{r}
+rows.NoGroup <- rows.NoGroup %>% mutate(TmpTransferKey = paste0(Service.ID,Charge.Name.Short,Quantity))
+```
+
+Column Checks - this reports the number of unique values in the columns
+
+```{r}
+rows.NoGroup %>% summarize(across(everything(), n_distinct)) %>% as.data.frame() %>% t()
+```
+
+#### Import Stuart's annotations
+
+```{r}
+sl.annot <- read.xlsx("igt.assistance.need allocation_SLcwFix.xlsx")
+```
+
+Add a temporary key to transfer data
+
+```{r}
+sl.annot <- sl.annot %>% mutate(TmpTransferKey = paste0(Service.ID,Charge.Name.Short,Quantity))
+```
+
+Extract the tmp key and stuart's annotations
+
+```{r}
+sl.annot <- sl.annot %>% dplyr::select(TmpTransferKey, group)
+sl.annot <- sl.annot %>% rename(sl.group = group)
+```
+
+Check the number of matches between sl annotations and noGroup file:
+
+```{r}
+matches <- intersect(rows.NoGroup$TmpTransferKey, sl.annot$TmpTransferKey)
+cat("Matching TmpTransferKeys:", length(matches), "\n")
+```
+
+Join sl.group to rows.NoGroup
+
+```{r}
+rows.NoGroup <- rows.NoGroup %>%
+  left_join(sl.annot %>% select(TmpTransferKey, sl.group),
+            by = "TmpTransferKey")
+```
+
+Move new sl.group values to group and get rid of extra columns
+
+```{r}
+rows.NoGroup <- rows.NoGroup %>%
+  mutate(group = sl.group) %>%
+  select(-TmpTransferKey, -sl.group)
+```
+
+Re-assemble igt.final.annot
+
+```{r}
+igt.final.annot <- rbind(rows.WithGroup,rows.NoGroup)
+```
+
+### Add rate modifiers and adjusted Total.price
+
+Create rate modifier dataframe
+
+```{r}
+rate_modifiers <- tibble(
+  IGT_DSMI_Sponsor = c("KI_member", "KI_affiliate", "MIT_sponsor", "MIT_non_sponsor", "external", "industry"),
+  RateModifier = c(1, 1, 1, 1.1, 1.25, 1.4)
+)
+```
+
+Join to igt.final.annot
+
+```{r}
+igt.final.annot <- igt.final.annot %>%
+  left_join(rate_modifiers,
+            by = "IGT_DSMI_Sponsor")
+```
+
+Check the join
+
+```{r}
+table(igt.final.annot$IGT_DSMI_Sponsor,igt.final.annot$RateModifier)
+```
+
+Calculate adjusted price column for pie charts
+
+```{r}
+igt.final.annot <- igt.final.annot %>% mutate(Adjusted.Total.Price = Total.Price / RateModifier)
 ```
 
 # Data Visualizations
@@ -405,9 +489,9 @@ cat("Dimensions of igt.final.annot after 2nd exclude:", dim(igt.final.annot), "\
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "MIT_Sponsor" = "lightpink",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
 
 # Define order of sponsors for stacking (top to bottom)
@@ -428,7 +512,7 @@ table(samp$Charge.Name.Short,samp$Unit.of.Measure)
 samp.pie <- samp %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Adjusted.Total.Price,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -437,21 +521,23 @@ samp.pie <- samp %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Sample isolation, purification, and initial processing units",
+  labs(title = "Sample Isolation, Purification, \nand Initial Processing (relative dollars)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
-
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 samp.pie
 ```
 
@@ -469,7 +555,7 @@ table(lib$Charge.Name.Short,lib$Unit.of.Measure)
 lib.pie <- lib %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Adjusted.Total.Price,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -478,20 +564,23 @@ lib.pie <- lib %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Library Preparation, Automation, and Quality Control ",
+  labs(title = "Library Preparation, Automation, \nand Quality Control (relative dollars)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 lib.pie
 ```
@@ -510,7 +599,7 @@ table(spatial$Charge.Name.Short,spatial$Unit.of.Measure)
 spatial.pie <- spatial %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Total.Price), 
+  summarise(Quantity = sum(round(Adjusted.Total.Price,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -519,21 +608,23 @@ spatial.pie <- spatial %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Single Cell and Spatial 'Omics Units",
+  labs(title = "Single Cell and Spatial 'Omics\n(relative dollars)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
-
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 spatial.pie
 ```
 
@@ -551,7 +642,7 @@ table(seq$Charge.Name.Short,seq$Unit.of.Measure)
 seq.pie <- seq %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Adjusted.Total.Price,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[IGT_DSMI_Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -560,34 +651,39 @@ seq.pie <- seq %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Sequencing and Oligonucleotide Synthesis Units",
+  labs(title = "Sequencing and Oligonucleotide Synthesis\n(relative dollars)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 seq.pie
 ```
 
 # Plot the pie charts figure
 
-```{r,fig.width=20,fig.height=4}
-samp.pie + lib.pie + spatial.pie + seq.pie + plot_layout(ncol = 4, guides = "collect")
+```{r,fig.width=12,fig.height=4}
+samp.pie + lib.pie + spatial.pie + seq.pie + plot_layout(ncol = 4, guides = "collect") & 
+  theme(legend.position = "bottom")
 
-combo.pie <- samp.pie + lib.pie + spatial.pie + seq.pie + plot_layout(ncol = 4, guides = "collect")
+combo.pie <- samp.pie + lib.pie + spatial.pie + seq.pie + plot_layout(ncol = 4, guides = "collect") & 
+  theme(legend.position = "bottom")
 ggsave("figures/IGT_combo.pie.pdf",
        plot = combo.pie,
-       dpi = 150,
-       width = 20,
+       dpi = 600,
+       width = 12,
        height = 4,
        units = "in")
 ```
@@ -595,8 +691,8 @@ ggsave("figures/IGT_combo.pie.pdf",
 # Write annotated output file
 
 ```{r}
-# write.xlsx(igt.final,"igt.final.xlsx")
-# write.xlsx(igt.final.annot,"igt.final.annot.xlsx")
+write.xlsx(igt.final,"igt.final.xlsx")
+write.xlsx(igt.final.annot,"igt.final.annot.xlsx")
 ```
 
 # write session info

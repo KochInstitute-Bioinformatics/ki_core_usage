@@ -31,6 +31,9 @@ options(future.globals.maxSize = 8e10)
 
 # Optional: seed for reproducibility
 set.seed(42)
+
+# Clear knitr cache
+unlink("hts_Processing_cache", recursive = TRUE)
 ```
 
 ```{r}
@@ -175,6 +178,7 @@ metpro <- metpro %>% dplyr::mutate(Center = "")
 metpro <- metpro %>% dplyr::mutate(Usage.Type = "")
 metpro <- metpro %>% dplyr::mutate(Notes = "")
 metpro <- metpro %>% dplyr::mutate(Category = "")
+metpro <- metpro %>% dplyr::mutate(Charge.ID = "")
 ```
 
 ### Select ilabs columns from metpro
@@ -183,8 +187,15 @@ metpro <- metpro %>% dplyr::mutate(Category = "")
 metpro.to_rbind <- metpro %>%
   dplyr::select(Service.ID, Service.Type, Customer.Name, Customer.Lab, Customer.Department, 
                 Customer.Institute, Charge.Name, Notes, Unit.of.Measure, Quantity, Price, 
-                Total.Price, Price.Type, Purchase.Date, Core.Name, Center, Category, 
+                Total.Price, Price.Type, Purchase.Date, Core.Name, Charge.ID, Center, Category, 
                 Usage.Type)
+```
+
+### Check the columns
+
+```{r}
+colnames(ilabs.msbp)
+colnames(metpro.to_rbind)
 ```
 
 # Join ilabs and WI metabolomics
@@ -404,10 +415,11 @@ msbp.final <- msbp.final %>%
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
 sponsor_colors <- c(
-  "Center_Member" = "steelblue",
-  "MIT_Sponsor" = "lightpink",
-  "Non_Sponsor" = "orange"
+  "Center_Member" = "steelblue2",
+  "MIT_Sponsor" = "orange",
+  "Non_Sponsor" = "#C16644"
 )
+
 
 # Define order of sponsors for stacking (top to bottom)
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
@@ -437,41 +449,6 @@ pep.synth <- pep.synth %>% dplyr::mutate(Quant.To.Present = if_else(Charge.Name 
 table(pep.synth$Quant.To.Present,pep.synth$Charge.Name)
 ```
 
-### Prepare a peptide synthesis bar chart
-
-```{r,fig.width=4,fig.height=4}
-synth.bar <- pep.synth %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quant.To.Present), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Peptide Synthesis",
-       x = "Sponsor Group",
-       y = "Syntheses",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-synth.bar
-```
-
 ### Peptide synthesis pie chart
 
 ```{r}
@@ -492,15 +469,18 @@ synth.pie <- pep.synth %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Peptide Synthesis",
+  labs(title = "Peptide Synthesis (syntheses)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 synth.pie
 ```
@@ -522,48 +502,13 @@ prot <- msbp.final %>% dplyr::filter(Service.Group == "Proteomics") %>%
 prot %>% dplyr::select(Charge.Name) %>% unique() %>% dim()
 ```
 
-### Prepare Proteomics bar chart
-
-```{r,fig.width=5,fig.height=6}
-prot.bar <- prot %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Proteomics",
-       x = "Sponsor Group",
-       y = "Samples",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-prot.bar
-```
-
 ### Prepare proteomics pie chart
 
 ```{r}
 prot.pie <- prot %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -577,15 +522,18 @@ prot.pie <- prot %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Proteomics",
+  labs(title = "Proteomics (samples)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 prot.pie
 ```
@@ -604,47 +552,13 @@ lip.met <- msbp.final %>% dplyr::filter(Service.Group == "Lipid or Metabolite Pr
 lip.met %>% dplyr::select(Charge.Name) %>% table() %>% as.data.frame()
 ```
 
-### Prepare the Lipid or Metabolite bar chart
-
-```{r,fig.width=5,fig.height=6}
-lip.met.bar <- lip.met %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Lipid or Metabolite Profiling",
-       x = "Sponsor Group",
-       y = "Samples",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-lip.met.bar
-```
 ### Prepare the Lipid or Metabolite pie chart
 
 ```{r}
 lip.met.pie <- lip.met %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -661,19 +575,22 @@ lip.met.pie <- lip.met %>%
                                         TRUE ~ 0.5),
                       segment.size = case_when(Sponsor_ForPlot == "Center_Member" ~ 0,
                                                TRUE ~ 0.5)),
-                  size = 3,
+                  size = 3.6,
                   fontface = "bold",
-                  color = "white",
+                  color = "black",
                   force = 60,
                   force_pull = 8.5,
                   direction = "both",
                   max.overlaps = Inf) +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Lipid or Metabolite Profiling",
+  labs(title = "Lipid/Metabolite Profiling (instrument runs)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 lip.met.pie
 ```
@@ -695,47 +612,14 @@ maldi <- msbp.final %>% dplyr::filter(Charge.Name %in% c("MALDI additional mode 
 ```{r}
 maldi %>% dplyr::select(Charge.Name) %>% table() %>% as.data.frame()
 ```
-### Prepare the MALDI or HPLC bar chart
 
-```{r,fig.width=5,fig.height=6}
-maldi.bar <- maldi %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "MALDI or HPLC",
-       x = "Sponsor Group",
-       y = "Samples",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-maldi.bar
-```
 ### Prepare the MALDI or HPLC pie chart
 
 ```{r}
 maldi.pie <- maldi %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quantity), 
+  summarise(Quantity = sum(round(Quantity,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -749,15 +633,18 @@ maldi.pie <- maldi %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "MALDI or HPLC",
+  labs(title = "MALDI/HPLC (samples)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
 maldi.pie
 ```
@@ -875,48 +762,13 @@ time.noCollapse <- time.noCollapse%>% dplyr::mutate(
 time <- rbind(time.collapsed,time.noCollapse)
 ```
 
-### Prepare the MALDI or HPLC bar chart
-
-```{r,fig.width=5,fig.height=6}
-time.bar <- time %>%
-  mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
-  group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quant.To.Present), 
-            Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
-                               n_distinct(Faculty.Key[Sponsor == "KI_member"]),
-                               n_distinct(Faculty.Key)),
-            .groups = "drop") %>%
-  mutate(Percent = round((Quantity / sum(Quantity)) * 100, 0),
-         Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
-                             paste0(Num_Labs, " Members"),
-                             paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n\n", Percent, "%\n", Lab_Label)) %>%
-  ggplot(aes(x = Sponsor_ForPlot, y = Quantity, fill = Sponsor_ForPlot)) +
-  geom_col() +
-  geom_text(aes(label = Label), 
-            vjust = 0.5,
-            size = 3,
-            fontface = "bold",
-            color = "white") +
-  scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Time",
-       x = "Sponsor Group",
-       y = "Samples",
-       fill = "Sponsor") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-time.bar
-```
-
 ### Prepare the time pie chart
 
 ```{r}
 time.pie <- time %>%
   mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(Quant.To.Present), 
+  summarise(Quantity = sum(round(Quant.To.Present,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -930,30 +782,35 @@ time.pie <- time %>%
   geom_col() +
   geom_text(aes(label = Label), 
             position = position_stack(vjust = 0.5),
-            size = 3,
+            size = 3.6,
             fontface = "bold",
-            color = "white") +
+            color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Time",
+  labs(title = "Staff Time (hours)",
        fill = "Sponsor") +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 12,
+                                  face = "plain",
+                                  hjust = 0.5))
 
-maldi.pie
+time.pie
 ```
 
 # Plot the pie charts figure
 
-```{r,fig.width=16,fig.height=4}
-synth.pie + prot.pie + lip.met.pie + maldi.pie + time.pie + plot_layout(ncol = 5, guides = "collect")
+```{r,fig.width=11,fig.height=8}
+synth.pie + prot.pie + lip.met.pie + maldi.pie + time.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 
-combo.pie <- synth.pie + prot.pie + lip.met.pie + maldi.pie + time.pie + plot_layout(ncol = 5, guides = "collect")
+combo.pie <- synth.pie + prot.pie + lip.met.pie + maldi.pie + time.pie + plot_layout(ncol = 3, guides = "collect") & 
+  theme(legend.position = "bottom")
 ggsave("figures/MSBP_combo.pie.pdf", 
        plot = combo.pie, 
-       dpi = 150, 
-       width = 16, 
-       height = 4, 
+       dpi = 600, 
+       width = 11, 
+       height = 8, 
        units = "in")
 ```
 
