@@ -210,14 +210,23 @@ ilabs.flow <- ilabs.flow %>%
 
 # Data Visualizations
 
+## Define Color Palette
+
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
-sponsor_colors <- c(
-  "Center_Member" = "steelblue2",
-  "MIT_Sponsor" = "orange",
-  "Non_Sponsor" = "#C16644"
-)
+# Original palette
+# sponsor_colors <- c(
+#   "Center_Member" = "steelblue2",
+#   "MIT_Sponsor" = "orange",
+#   "Non_Sponsor" = "#C16644"
+# )
 
+# Colorblind safe 3
+sponsor_colors <- c(
+  "Center_Member" = "#56B4E9",
+  "MIT_Sponsor" = "#E69F00",
+  "Non_Sponsor" = "#009E73"
+)
 
 # Define order of sponsors for stacking (top to bottom)
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")

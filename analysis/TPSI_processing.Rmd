@@ -164,16 +164,55 @@ ilabs.tpsi <- ilabs.tpsi %>%
   dplyr::left_join(sponsor.toPlot, by = c("Sponsor" = "Sponsor"))
 ```
 
+### Add rate modifiers and adjusted Total.price
+
+Create rate modifier dataframe
+
+```{r}
+rate_modifiers <- tibble(
+  Histology_Sponsor = c("KI_member", "KI_affiliate", "MIT_sponsor", "MIT_non_sponsor", "external", "industry"),
+  RateModifier = c(1, 1, 1, 1.67, 1.67, 3.33)
+)
+```
+
+Join to ilabs.tpsi
+
+```{r}
+ilabs.tpsi <- ilabs.tpsi %>%
+  left_join(rate_modifiers,
+            by = "Histology_Sponsor")
+```
+
+Check the join
+
+```{r}
+table(ilabs.tpsi$Histology_Sponsor,ilabs.tpsi$RateModifier)
+```
+
+Calculate adjusted price column for pie charts
+
+```{r}
+ilabs.tpsi <- ilabs.tpsi %>% mutate(Adjusted.Total.Price = Total.Price / RateModifier)
+```
+
 # Data Visualizations
 
-## Define Colors
+## Define Color Palette
 
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
+# Original palette
+# sponsor_colors <- c(
+#   "Center_Member" = "steelblue2",
+#   "MIT_Sponsor" = "orange",
+#   "Non_Sponsor" = "#C16644"
+# )
+
+# Colorblind safe 3
 sponsor_colors <- c(
-  "Center_Member" = "steelblue2",
-  "MIT_Sponsor" = "orange",
-  "Non_Sponsor" = "#C16644"
+  "Center_Member" = "#56B4E9",
+  "MIT_Sponsor" = "#E69F00",
+  "Non_Sponsor" = "#009E73"
 )
 
 # Define order of sponsors for stacking (top to bottom)
@@ -355,7 +394,7 @@ table(tiss$Unit.of.Measure)
 tiss.pie <- tiss %>%
     mutate(Sponsor_ForPlot = factor(Sponsor_ForPlot, levels = sponsor_order)) %>%
   group_by(Sponsor_ForPlot) %>%
-  summarise(Quantity = sum(round(Quantity,0)), 
+  summarise(Quantity = sum(round(Adjusted.Total.Price,0)), 
             Num_Labs = if_else(first(Sponsor_ForPlot) == "Center_Member",
                                n_distinct(Faculty.Key[Sponsor == "KI_member"]),
                                n_distinct(Faculty.Key)),
@@ -364,7 +403,7 @@ tiss.pie <- tiss %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
@@ -374,7 +413,7 @@ tiss.pie <- tiss %>%
             color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Tissue Processing (units)",
+  labs(title = "Tissue Processing\n(relative dollars)",
        fill = "Sponsor") +
   theme_void() +
   theme(legend.position = "bottom",

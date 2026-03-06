@@ -169,16 +169,23 @@ as.data.frame(table(ilabs.pmit$Charge.Name.Short)) %>% arrange(desc(Freq))
 ```
 # Data Visualizations
 
-## Define Colors
+## Define Color Palette
 
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
-sponsor_colors <- c(
-  "Center_Member" = "steelblue2",
-  "MIT_Sponsor" = "orange",
-  "Non_Sponsor" = "#C16644"
-)
+# Original palette
+# sponsor_colors <- c(
+#   "Center_Member" = "steelblue2",
+#   "MIT_Sponsor" = "orange",
+#   "Non_Sponsor" = "#C16644"
+# )
 
+# Colorblind safe 3
+sponsor_colors <- c(
+  "Center_Member" = "#56B4E9",
+  "MIT_Sponsor" = "#E69F00",
+  "Non_Sponsor" = "#009E73"
+)
 
 # Define order of sponsors for stacking (top to bottom)
 sponsor_order <- c("Center_Member", "MIT_Sponsor", "Non_Sponsor")
@@ -465,7 +472,7 @@ model.serv.pie <- model.serv %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
+         Label = paste0("$",Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
@@ -475,7 +482,7 @@ model.serv.pie <- model.serv %>%
             color = "black") +
   coord_polar("y", start = 0) +
   scale_fill_manual(values = sponsor_colors) +
-  labs(title = "Modeling Services\n(normalized charges)",
+  labs(title = "Modeling Services\n(relative dollars)",
        fill = "Sponsor") +
   theme_void() +
   theme(legend.position = "bottom",

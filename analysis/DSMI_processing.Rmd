@@ -343,14 +343,22 @@ This should be validated by looking for Customer.Lab values that have more than 
 
 # Data Visualizations
 
-## Define Colors
+## Define Color Palette
 
 ```{r}
 # Define colors for each Sponsor (adjust these hex codes as needed)
+# Original palette
+# sponsor_colors <- c(
+#   "Center_Member" = "steelblue2",
+#   "MIT_Sponsor" = "orange",
+#   "Non_Sponsor" = "#C16644"
+# )
+
+# Colorblind safe 3
 sponsor_colors <- c(
-  "Center_Member" = "steelblue2",
-  "MIT_Sponsor" = "orange",
-  "Non_Sponsor" = "#C16644"
+  "Center_Member" = "#56B4E9",
+  "MIT_Sponsor" = "#E69F00",
+  "Non_Sponsor" = "#009E73"
 )
 
 # Define order of sponsors for stacking (top to bottom)
@@ -391,7 +399,7 @@ train.pie <- train %>%
          Lab_Label = if_else(Sponsor_ForPlot == "Center_Member",
                              paste0(Num_Labs, " Members"),
                              paste0(Num_Labs, " Users")),
-         Label = paste0(Quantity, "\n(", Percent, "%)\n", Lab_Label)) %>%
+         Label = paste0(Quantity, "\n", Percent, "%\n", Lab_Label)) %>%
   ggplot(aes(x = "", y = Quantity, fill = Sponsor_ForPlot)) +
   geom_col() +
   geom_text(aes(label = Label), 
